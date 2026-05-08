@@ -1,5 +1,18 @@
 # MikroTik secrets / sensitive overrides — never commit
-secrets.rsc
+**/secrets.rsc
 
 # Mikrotik utils
 bin/*
+
+# Python — virtualenvs, build artifacts, caches
+.venv/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
