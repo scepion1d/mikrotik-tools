@@ -1,0 +1,5 @@
+# MikroTik secrets / sensitive overrides — never commit
+secrets.rsc
+
+# Mikrotik utils
+bin/*
