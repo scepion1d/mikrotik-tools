@@ -1,0 +1,37 @@
+[project]
+name = "rsc-bundle"
+version = "0.1.0"
+description = "Inline RouterOS .rsc /import directives into one file"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "rsc-bundle contributors" }]
+keywords = ["routeros", "mikrotik", "iac", "bundle", "config"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Networking",
+    "Topic :: System :: Systems Administration",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.scripts]
+rsc-bundle = "rsc_bundle.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["rsc_bundle*"]
+
+[tool.setuptools.package-data]
+rsc_bundle = ["py.typed"]

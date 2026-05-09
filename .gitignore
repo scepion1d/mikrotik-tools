@@ -4,6 +4,9 @@
 # Mikrotik utils
 bin/*
 
+# Local output from scripts
+/out/
+
 # Python — virtualenvs, build artifacts, caches
 .venv/
 **/__pycache__/
