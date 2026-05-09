@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .bundler import BundleError, bundle_file
+from .flatten import flatten
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -26,6 +27,15 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         required=True,
         help="output directory (created if missing); filename is auto-generated",
+    )
+    parser.add_argument(
+        "--no-flatten",
+        action="store_true",
+        help="keep RouterOS scripting wrappers (:global / :if / :foreach / "
+             "$helper invocations) and unresolved $var references in the bundle. "
+             "By default the bundler resolves all :global var assignments and "
+             "strips scripting glue, leaving only /path + add/set/remove statements "
+             "so the output matches a /export-style live router config.",
     )
 
     args = parser.parse_args(argv)
@@ -55,6 +65,9 @@ def main(argv: list[str] | None = None) -> int:
     except (FileNotFoundError, NotADirectoryError, ValueError) as exc:
         print(f"rsc-bundle: {exc}", file=sys.stderr)
         return 2
+
+    if not args.no_flatten:
+        text = flatten(text)
 
     out_path = out_dir / _build_output_name(main_script)
     out_path.write_text(text, encoding="utf-8")

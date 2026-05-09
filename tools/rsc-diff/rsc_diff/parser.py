@@ -42,11 +42,12 @@ def parse_text(text: str) -> Config:
             continue
 
         if line.startswith("/"):
-            # Menu path. RouterOS exports may put `set/add` on the same line as
-            # the path (e.g. `/system/identity set name=foo`); split if so.
-            head, _, rest = line.partition(" ")
-            current_menu = _normalise_menu(head)
-            rest = rest.strip()
+            # Menu path. Two formats are supported:
+            #   authored:  /interface/bridge          (slash-separated)
+            #   export:    /interface bridge          (space-separated submenus)
+            # In both forms, the path may be followed on the same line by an
+            # `add`/`set`/`remove` directive.
+            current_menu, rest = _split_menu_and_rest(line)
             if rest:
                 _consume_item(cfg, current_menu, rest)
             continue
@@ -60,9 +61,47 @@ def parse_text(text: str) -> Config:
     return cfg
 
 
+# Verbs that may appear on the same line as a menu path (RouterOS shorthand).
+_INLINE_VERBS = {"add", "set", "remove", "reset", "find", "print", "edit"}
+
+
+def _split_menu_and_rest(line: str) -> tuple[str, str]:
+    """Split a `/menu/path [rest]` line into (normalised menu, rest).
+
+    Handles both formats:
+      ``/interface/bridge``
+      ``/interface bridge add name=foo``
+    Returns the menu path with `/` separators and any trailing
+    `add`/`set`/`remove`/... directive (or empty string).
+    """
+    tokens = line.split()
+    # Find where the menu path ends and a verb (or arg) begins.
+    path_parts: list[str] = []
+    rest_index = len(tokens)
+    for i, tok in enumerate(tokens):
+        if i == 0:
+            # First token always part of the path; strip leading `/`.
+            path_parts.append(tok.lstrip("/"))
+            continue
+        if tok in _INLINE_VERBS:
+            rest_index = i
+            break
+        # Tokens containing `=` or `[` are command args, not menu segments.
+        if "=" in tok or tok.startswith("[") or tok.startswith('"'):
+            rest_index = i
+            break
+        path_parts.append(tok)
+
+    menu = "/" + "/".join(p for p in path_parts if p)
+    menu = _normalise_menu(menu)
+    rest = " ".join(tokens[rest_index:])
+    return menu, rest
+
+
 def _normalise_menu(menu: str) -> str:
-    """Strip trailing slash, ensure leading slash, no whitespace."""
+    """Strip trailing slash, ensure leading slash, normalise separators."""
     menu = menu.strip()
+    # Authored form may legally have an inner `/`; nothing to do.
     if menu.endswith("/") and len(menu) > 1:
         menu = menu[:-1]
     return menu
@@ -104,21 +143,39 @@ def _looks_like_kv(token: str) -> bool:
 
 
 def _logical_lines(text: str):
-    r"""Yield lines with `\` continuations folded into one."""
+    r"""Yield lines with ``\`` continuations folded into one.
+
+    RouterOS treats ``\<newline><leading-whitespace>`` as a glue operator
+    that joins without inserting any separator -- the export form often
+    uses it to break inside a value, e.g. ``name=\\n    iac.bridge.lan``
+    must rejoin to ``name=iac.bridge.lan``. We strip the trailing ``\``
+    and the next line's leading whitespace, then concatenate with no
+    separator at all.
+
+    Authored configs put space + ``\`` at the end of a logical token, so
+    losing the inter-token space here would be wrong. We preserve any
+    whitespace that immediately preceded the ``\`` itself; that takes
+    care of inter-token spacing.
+    """
     buf: list[str] = []
     for line in text.splitlines():
-        stripped = line.rstrip()
-        if stripped.endswith("\\"):
-            buf.append(stripped[:-1].rstrip())
+        if line.endswith("\\"):
+            # Drop the backslash; preserve trailing whitespace that came
+            # before it (token separator in authored configs). Strip any
+            # leading whitespace if this is a continuation line itself.
+            content = line[:-1]
+            if buf:
+                content = content.lstrip()
+            buf.append(content)
             continue
         if buf:
-            buf.append(stripped.lstrip())
-            yield " ".join(buf)
+            buf.append(line.lstrip())
+            yield "".join(buf)
             buf = []
         else:
-            yield stripped
+            yield line.rstrip()
     if buf:
-        yield " ".join(buf)
+        yield "".join(buf)
 
 
 def _take_bracket(s: str) -> tuple[str, str]:

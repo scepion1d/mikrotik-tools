@@ -29,6 +29,26 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="exit 1 if any operations would be emitted (suitable for CI)",
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "disable per-menu defaults + computed-property normalisation. "
+            "Use this for the FIRST diff against an unfamiliar router so "
+            "any defaults-table miscalibration surfaces as visible drift."
+        ),
+    )
+    parser.add_argument(
+        "--lenient",
+        action="store_true",
+        help=(
+            "suppress asymmetric drift where one side has an explicit neutral "
+            "value (no/false/none/0/0s/empty) and the other side is silent. "
+            "Useful for diffing authored configs against /export output that "
+            "omits default-valued props. RISK: hides real drift if the actual "
+            "default is non-neutral. Prefer extending defaults.py once verified."
+        ),
+    )
 
     args = parser.parse_args(argv)
 
@@ -41,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
 
     old_cfg = parse_file(args.old)
     new_cfg = parse_file(args.new)
-    ops = diff(old_cfg, new_cfg)
+    ops = diff(old_cfg, new_cfg, strict=args.strict, lenient_defaults=args.lenient)
 
     if args.check:
         if ops:
@@ -49,7 +69,12 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         return 0
 
-    header = f"old: {args.old}\nnew: {args.new}"
+    header_lines = [f"old: {args.old}", f"new: {args.new}"]
+    if args.strict:
+        header_lines.append("strict mode: defaults + computed normalisation OFF")
+    if args.lenient:
+        header_lines.append("lenient mode: explicit-neutral vs missing suppressed")
+    header = "\n".join(header_lines)
     out = emit(ops, header=header)
 
     if args.output:

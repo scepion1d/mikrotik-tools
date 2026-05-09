@@ -24,6 +24,7 @@ dependencies = []
 
 [project.scripts]
 rsc-diff = "rsc_diff.cli:main"
+rsc-diff-verify = "rsc_diff.verify:main"
 
 [build-system]
 requires = ["setuptools>=61"]

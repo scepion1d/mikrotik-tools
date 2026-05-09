@@ -22,10 +22,13 @@ Public API
 ----------
 - :func:`bundle_file` -- read entry from disk, resolve via filesystem walk
 - :func:`bundle` -- bundle from an explicit ``{basename: text}`` map
+- :func:`flatten` -- post-pass that resolves ``:global`` vars and strips RouterOS
+  scripting wrappers (``:if`` / ``:foreach`` / helper invocations)
 - :class:`BundleError` -- raised on missing import / cycle
 """
 
 from .bundler import BundleError, bundle, bundle_file
+from .flatten import flatten
 
 __version__ = "0.1.0"
 

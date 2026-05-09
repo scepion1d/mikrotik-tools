@@ -22,21 +22,50 @@ def emit(ops: list[Op], *, header: str | None = None) -> str:
         return "\n".join(lines) + "\n"
 
     # Group consecutive ops by menu so we emit the menu path once.
-    for menu, menu_ops in groupby(ops, key=lambda op: op.menu):
+    for menu, menu_ops_iter in groupby(ops, key=lambda op: op.menu):
+        menu_ops = list(menu_ops_iter)
         lines.append(menu)
-        for op in menu_ops:
-            lines.append("    " + _render_op(op))
+
+        # Wipe-then-add pattern: when the first op in a menu is a wipe,
+        # bracket it with REMOVE OLD / ADD NEW comments so the patch reads
+        # as an intentional whole-menu replace.
+        wipe_then_add = bool(menu_ops) and menu_ops[0].kind == "wipe"
+
+        if wipe_then_add:
+            lines.append("    # 1. REMOVE OLD")
+            lines.append("    " + _render_op(menu_ops[0]))
+            if len(menu_ops) > 1:
+                lines.append("")
+                lines.append("    # 2. ADD NEW")
+                for op in menu_ops[1:]:
+                    lines.append("    " + _render_op(op))
+        else:
+            for op in menu_ops:
+                lines.append("    " + _render_op(op))
         lines.append("")
 
     return "\n".join(lines) + "\n"
 
 
 def _render_op(op: Op) -> str:
+    if op.kind == "wipe":
+        return "remove [find]"
+
     if op.kind == "add":
         return "add " + _render_props(op.props)
 
     if op.kind == "remove":
         return f"remove {_find_clause(op.menu, op.identity_key)}"
+
+    if op.kind == "reset":
+        # `reset` takes a list of property names, no values. It's the
+        # documented RouterOS way to revert a property to its default
+        # (see help.mikrotik.com/docs Console -> General Commands).
+        prop_list = " ".join(op.props.keys())
+        if op.menu in MENUS_SINGLETON:
+            return f"reset {prop_list}"
+        selector = _find_clause(op.menu, op.identity_key)
+        return f"reset {selector} {prop_list}"
 
     # set
     if op.menu in MENUS_SINGLETON:

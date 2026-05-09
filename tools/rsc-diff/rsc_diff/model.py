@@ -136,11 +136,27 @@ class Config:
 
 @dataclass(frozen=True)
 class Op:
-    """One operation to be emitted into the patch script."""
+    """One operation to be emitted into the patch script.
 
-    kind: Literal["add", "set", "remove"]
+    Kinds:
+      add    -- /menu add prop=val ...
+      set    -- /menu set [find ...] prop=val ...   (singletons: bare `set`)
+      reset  -- /menu reset [find ...] prop1 prop2 ...
+                Reverts named properties back to their RouterOS defaults.
+                `reset` is the universal RouterOS console command for this
+                (see help.mikrotik.com/docs Console -> General Commands).
+                Used when a property exists in old but not in new and isn't
+                a boolean we can flip to `no` via a regular `set`.
+      remove -- /menu remove [find ...]
+      wipe   -- /menu remove [find]                 (clears entire menu;
+                used as the first op when an ordered menu changed and the
+                differ chose to replace it wholesale; identity_key="*")
+    """
+
+    kind: Literal["add", "set", "reset", "remove", "wipe"]
     menu: str
     identity_key: str
     props: dict[str, str] = field(default_factory=dict)
     """For add: full prop set. For set: only props that changed.
-    For remove: empty (identity_key carries everything needed)."""
+    For reset: keys are property names to reset to default; values ignored.
+    For remove/wipe: empty (identity_key carries everything needed)."""

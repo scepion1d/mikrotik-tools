@@ -1,137 +1,87 @@
 # rsc-diff
 
-Lightweight RouterOS `.rsc` diff library + CLI. Compares two config files and
-emits a minimal set of `add` / `set` / `remove` operations to transform the
-**old** config into the **new** one.
-
-> ⚠️ **Status: MVP, not production-ready.**
-> The parser + diff logic work for hand-crafted fixtures and simple cases, but
-> the tool currently produces **false-positive diffs** on real configs because
-> it doesn't normalise property values yet. Treat the output as a hint, not as
-> ground truth. See [Limitations](#limitations) and [`ROADMAP.md`](ROADMAP.md).
+RouterOS `.rsc` differ + round-trip verifier. Compares two configs (file-vs-file) and emits an apply-able patch of `add` / `set` / `reset` / `remove` ops. The companion `rsc-diff-verify` command checks that applying the patch and rolling back lands you exactly where you started.
 
 ## Install
 
-Zero runtime dependencies; Python ≥ 3.10. Install from this directory:
-
 ```powershell
-# with uv (recommended -- managed venv at .venv/)
-uv sync
-
-# or with pip
-pip install -e .
+.\build.ps1            # uv sync; or run repo-root build.ps1 to also link bin\rsc-diff.cmd + bin\rsc-diff-verify.cmd
 ```
 
-## CLI usage
+Python ≥ 3.10. Zero runtime deps.
+
+## CLI
 
 ```powershell
-# diff to stdout
-uv run rsc-diff old.rsc new.rsc
+# diff
+..\..\bin\rsc-diff.cmd old.rsc new.rsc -o patch.rsc
+..\..\bin\rsc-diff.cmd old.rsc new.rsc --check         # exit 1 on drift
+..\..\bin\rsc-diff.cmd old.rsc new.rsc --strict        # disable defaults + computed normalization
+..\..\bin\rsc-diff.cmd old.rsc new.rsc --lenient       # explicit-neutral vs missing -> equal
 
-# write a patch file
-uv run rsc-diff old.rsc new.rsc -o patch.rsc
-
-# CI mode -- exit 1 if any drift
-uv run rsc-diff old.rsc new.rsc --check
+# verify (defaults to out/live.rsc + latest out/<site>-YYMMDD-XXXXX.rsc bundle + out/rollforward.rsc + out/rollback.rsc)
+..\..\bin\rsc-diff-verify.cmd
+..\..\bin\rsc-diff-verify.cmd --lenient --show-ops
+..\..\bin\rsc-diff-verify.cmd --live live.rsc --candidate candidate.rsc --rollforward fwd.rsc --rollback bwd.rsc
 ```
 
-## Library usage
+## Library
 
 ```python
-from pathlib import Path
+from rsc_diff import parse_file, diff, emit
+from rsc_diff.verify import apply_patch, residual_ops
 
-from rsc_diff import Config, Op, diff, emit, parse_file, parse_text
+old = parse_file("live.rsc")
+new = parse_file("candidate.rsc")
+ops = diff(old, new, lenient_defaults=True)
+patch_text = emit(ops, header="live -> candidate")
 
-# 1. Parse from disk or from a string
-old: Config = parse_file("baseline.rsc")
-new: Config = parse_text(Path("desired.rsc").read_text())
-
-# 2. Compute the operation list
-ops: list[Op] = diff(old, new)
-print(f"{len(ops)} change(s)")
-
-# 3. Inspect ops programmatically...
-for op in ops:
-    print(op.kind, op.menu, op.identity_key, op.props)
-
-# 4. ...or render as a runnable RouterOS patch
-patch_text: str = emit(ops, header="from baseline.rsc to desired.rsc")
-Path("patch.rsc").write_text(patch_text)
+# verify
+result = apply_patch(old, "rollforward.rsc")
+drift = residual_ops(result, new)        # empty list = round-trip clean
 ```
-
-### Public API
 
 | Symbol | Purpose |
 |---|---|
-| `parse_file(path)` | Read `.rsc` from disk → `Config` |
-| `parse_text(s)` | Parse `.rsc` string → `Config` |
-| `diff(old, new)` | `Config × Config → list[Op]` |
-| `emit(ops, *, header=None)` | `list[Op] → str` (runnable patch) |
-| `Config` | `{menu_path: [Item]}` container |
-| `Item` | One parsed config item |
-| `Op` | One operation (`kind`, `menu`, `identity_key`, `props`) |
-| `__version__` | Package version string |
-
-The package ships `py.typed` so type checkers (mypy, pyright) see annotations.
-
-## Layout
-
-```
-tools/rsc-diff/
-├── README.md                  this file
-├── ROADMAP.md                 staged plan (MVP -> normalisation -> live)
-├── pyproject.toml             python packaging (no runtime deps)
-├── rsc_diff/
-│   ├── __init__.py            public API + __version__
-│   ├── __main__.py            python -m rsc_diff entry point
-│   ├── cli.py                 argument parsing + orchestration
-│   ├── model.py               Item / Config / Op + identity_key resolution
-│   ├── parser.py              .rsc -> Config (line-based; \\, "...", [find])
-│   ├── differ.py              Config x Config -> [Op]
-│   ├── emitter.py             [Op] -> .rsc text
-│   └── py.typed               PEP 561 typing marker
-└── tests/
-    ├── fixtures/{empty,minimal_a,minimal_b}.rsc
-    └── test_roundtrip.py
-```
+| `parse_file(path)` / `parse_text(s)` | `.rsc` → `Config` |
+| `diff(old, new, *, strict=False, lenient_defaults=False)` | `Config × Config → list[Op]` |
+| `emit(ops, *, header=None)` | `list[Op] → str` |
+| `Config` / `Item` / `Op` | Data model |
+| `verify.apply_patch(cfg, patch_path)` | Simulator: replay patch ops on a `Config` |
+| `verify.residual_ops(result, target)` | Re-runs `diff()`; empty = semantic equality |
 
 ## Identity model
 
-Each parsed item gets an `identity_key` derived in this order:
+Each parsed item gets an `identity_key`:
 
 1. `name=iac.x.y` if the menu accepts a `name` field
-2. `comment` containing `iac.x.y` if not (firewall rules, leases, ipv6 lists)
-3. `default-name=etherN` for built-ins (set-only menus)
-4. Position fallback (ordered menus without iac tags)
-5. Menu path itself for singletons (`/system/clock`, `/ip/dns`, …)
+2. `comment` containing `iac.x.y` token (firewall rules, leases, ipv6 lists)
+3. `default-name=etherN` for built-ins
+4. `@anon=N` positional fallback (unnamed items, no `iac.*` token)
+5. menu path itself for singletons
 
-This matches the convention enforced by `rsc/main.rsc`.
-## Testing
+Ordered menus (firewall chains, address-list) use **wipe-then-add**: any drift triggers `remove [find]` + full re-add in declaration order.
+
+## Defaults & normalization
+
+`defaults.py` lists per-menu property defaults verified against `/export` output (export omits a prop iff it equals the default). Adding a wrong entry silently erases real drift, so be conservative — comments document the evidence path.
+
+| Mode | Behavior |
+|---|---|
+| default | Strip identity props, computed props (`network=` derived from `address=`), and known defaults from comparison. |
+| `--strict` | Disable both. Surfaces every textual delta. Use for the first diff against an unfamiliar router. |
+| `--lenient` | On top of default: suppress drift where one side has explicit `no` / `false` / `none` / `0` / `0s` / `""` and the other side is silent. **Hides real drift if the actual default is non-neutral.** Verification-only; don't generate patches with this. |
+
+## Caveats
+
+- **`/ip/service` positional drift.** Items have no `name=` and no `iac.*` comment, so the differ falls back to `@anon=N` — which mis-aligns when live router and authored config emit services in different orders. `--lenient` masks the most common symptom.
+- **RouterOS expression literals.** `admin-mac=[/interface/ethernet get [find name=iac.ether.lan1] mac-address]` is stored as the literal string; the verify simulator can't evaluate it.
+- **Singleton-menu upsert.** `apply_patch` doesn't auto-create singleton items (e.g. `/system/identity`) when the live side omits them. The differ emits the `set` correctly; the simulator just needs an explicit upsert path.
+- **No `place-before=` for ordered menus.** Always wipe-then-add.
+- **No live-router mode.** All diffs are file-vs-file. Capture live state via `/export terse file=live` then drag off the router.
+
+## Tests
 
 ```powershell
-uv run python tests\test_roundtrip.py
+.\.venv\Scripts\python.exe tests\test_roundtrip.py
 ```
-
-## Limitations
-
-The tool is wired end-to-end and round-trips simple configs cleanly, but
-several real-world cases trip it up. Don't apply the generated patch
-unreviewed.
-
-- **No property normalisation.** `wpa2-psk,wpa3-psk` vs `wpa3-psk,wpa2-psk`
-  shows as a diff. So does `192.168.10.2` vs `192.168.10.2/32` for
-  `/ip/service`. Boolean defaults (`disabled=no` left implicit) also drift.
-- **Ordered menus emit `add` at end.** No `place-before=` yet, so reordering
-  firewall rules looks like remove+add.
-- **Variable references** (`$adminPass`, `$wifiIntPass`) are compared as
-  literal strings. If two configs reference the same variable the diff is
-  silent; if values diverge in `secrets.rsc` the diff won't surface that.
-- **Helper / `:global` / `:if` / `:foreach` lines** from orchestrator
-  scripts are ignored. This tool diffs CONFIG, not orchestration.
-- **Property removals** (key in old, not in new) are not emitted -- RouterOS
-  unset semantics differ per menu and the safe choice was to no-op.
-- **Live-router mode is not implemented.** All diffs are file-vs-file. A
-  diff between source and the running router would require pulling state
-  via REST or API + a per-menu schema.
-
-See [`ROADMAP.md`](ROADMAP.md) for the staged plan to address these.
