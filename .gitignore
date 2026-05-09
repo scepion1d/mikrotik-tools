@@ -1,6 +1,9 @@
 # MikroTik secrets / sensitive overrides — never commit
 **/secrets.rsc
 
+# Deploy credentials (.env.example IS committed)
+.env
+
 # Mikrotik utils
 bin/*
 

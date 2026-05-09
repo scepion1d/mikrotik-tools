@@ -4,8 +4,11 @@ Lightweight RouterOS `.rsc` diff library + CLI. Compares two config files and
 emits a minimal set of `add` / `set` / `remove` operations to transform the
 **old** config into the **new** one.
 
-Status: **MVP** — parser + naive differ + CLI + library API. No normalisation,
-no ordering-aware moves, no live router mode yet. See [`ROADMAP.md`](ROADMAP.md).
+> ⚠️ **Status: MVP, not production-ready.**
+> The parser + diff logic work for hand-crafted fixtures and simple cases, but
+> the tool currently produces **false-positive diffs** on real configs because
+> it doesn't normalise property values yet. Treat the output as a hint, not as
+> ground truth. See [Limitations](#limitations) and [`ROADMAP.md`](ROADMAP.md).
 
 ## Install
 
@@ -109,13 +112,26 @@ This matches the convention enforced by `rsc/main.rsc`.
 uv run python tests\test_roundtrip.py
 ```
 
-## Caveats (MVP)
+## Limitations
 
-- No property normalisation -- `wpa2-psk,wpa3-psk` vs `wpa3-psk,wpa2-psk` will
-  show as a diff even though RouterOS treats them as equal.
-- Ordered menus emit `add` at end, no `place-before=` yet.
-- Variable references (`$adminPass`) compared as literal strings.
-- Helper / `:global` / `:if` lines from apply.rsc-style scripts are ignored;
-  this tool diffs CONFIG, not orchestration.
-- Property removals (key in old, not in new) are not emitted (RouterOS unset
-  semantics differ per menu).
+The tool is wired end-to-end and round-trips simple configs cleanly, but
+several real-world cases trip it up. Don't apply the generated patch
+unreviewed.
+
+- **No property normalisation.** `wpa2-psk,wpa3-psk` vs `wpa3-psk,wpa2-psk`
+  shows as a diff. So does `192.168.10.2` vs `192.168.10.2/32` for
+  `/ip/service`. Boolean defaults (`disabled=no` left implicit) also drift.
+- **Ordered menus emit `add` at end.** No `place-before=` yet, so reordering
+  firewall rules looks like remove+add.
+- **Variable references** (`$adminPass`, `$wifiIntPass`) are compared as
+  literal strings. If two configs reference the same variable the diff is
+  silent; if values diverge in `secrets.rsc` the diff won't surface that.
+- **Helper / `:global` / `:if` / `:foreach` lines** from orchestrator
+  scripts are ignored. This tool diffs CONFIG, not orchestration.
+- **Property removals** (key in old, not in new) are not emitted -- RouterOS
+  unset semantics differ per menu and the safe choice was to no-op.
+- **Live-router mode is not implemented.** All diffs are file-vs-file. A
+  diff between source and the running router would require pulling state
+  via REST or API + a per-menu schema.
+
+See [`ROADMAP.md`](ROADMAP.md) for the staged plan to address these.

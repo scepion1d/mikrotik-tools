@@ -1,5 +1,11 @@
 """Bundle RouterOS .rsc files by inlining ``/import file-name=...`` directives.
 
+Each import target is resolved **relative to the importing file's
+directory**, not by basename across a flat source tree. So
+``/import file-name=helpers/log.rsc`` inside ``rsc/apply.rsc`` resolves to
+``rsc/helpers/log.rsc``, and ``/import file-name=../shared/x.rsc`` would
+walk up.
+
 Public entry points: :func:`bundle` (text-in) and :func:`bundle_file` (path-in).
 """
 
@@ -8,7 +14,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .resolver import build_source_map
+from .resolver import resolve_relative
 from .unfold import unfold
 
 
@@ -39,31 +45,75 @@ class BundleError(Exception):
 
 
 def bundle_file(entry: str | Path, root: str | Path | None = None) -> str:
-    """Bundle *entry* by walking *root* (defaults to entry's parent dir).
+    """Bundle *entry*. Imports are resolved relative to each file's location.
 
-    Resolves imports by basename across the whole tree under *root*.
+    The *root* argument is accepted for backwards compatibility but ignored;
+    the entry's parent directory acts as the implicit base, and nested
+    imports walk relative to their own file.
+
     Returns the bundled text.
     """
+    del root  # kept for API compatibility; relative-path mode doesn't need it
     entry_path = Path(entry).resolve()
-    root_path = Path(root).resolve() if root is not None else entry_path.parent
-    source_map = build_source_map(root_path)
-    sources = {name: path.read_text(encoding="utf-8") for name, path in source_map.items()}
-    # Make sure the entry file itself is in the map (it should be if it's
-    # under root, but allow entries outside root by adding it explicitly).
-    if entry_path.name not in sources:
-        sources[entry_path.name] = entry_path.read_text(encoding="utf-8")
-    return bundle(entry_path.name, sources)
+    if not entry_path.is_file():
+        raise BundleError(f"entry not found: {entry_path}")
+
+    visited: set[Path] = set()
+    on_stack: list[Path] = []
+    out: list[str] = []
+
+    def visit(path: Path) -> None:
+        path = path.resolve()
+        if path in on_stack:
+            cycle = " -> ".join(p.name for p in on_stack + [path])
+            raise BundleError(f"import cycle: {cycle}")
+        if path in visited:
+            out.append(f"# rsc-bundle: skipped duplicate import of {path.name}\n")
+            return
+
+        on_stack.append(path)
+        visited.add(path)
+
+        out.append(f"# >>> begin {path.name}\n")
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise BundleError(f"read failed: {path}: {exc}") from exc
+
+        unfolded = unfold(text)
+        for raw_line in unfolded.splitlines(keepends=True):
+            match = IMPORT_RE.match(raw_line.rstrip("\r\n"))
+            if match:
+                target = match.group("qname") or match.group("bname")
+                # Skip imports we still can't resolve statically (variable
+                # reference). Leave the line verbatim so RouterOS handles it
+                # at runtime if anyone uploads the bundle alongside originals.
+                if target.startswith("$"):
+                    out.append(raw_line)
+                    continue
+                try:
+                    resolved = resolve_relative(path, target)
+                except FileNotFoundError as exc:
+                    raise BundleError(str(exc)) from exc
+                visit(resolved)
+            else:
+                out.append(raw_line)
+
+        if out and not out[-1].endswith("\n"):
+            out.append("\n")
+        out.append(f"# <<< end {path.name}\n")
+
+        on_stack.pop()
+
+    visit(entry_path)
+    return "".join(out)
 
 
 def bundle(entry_basename: str, sources: dict[str, str]) -> str:
-    """Bundle starting from *entry_basename*, resolving imports against *sources*.
+    """Bundle from an in-memory ``{basename: text}`` map.
 
-    Each file's text is first passed through :func:`unfold` to expand
-    ``:foreach`` loops over known array bindings into literal-import lines,
-    so dynamic ``/import file-name=$f`` patterns become resolvable.
-
-    *sources* maps basename -> file contents. Raises :class:`BundleError`
-    on a missing import target or an import cycle.
+    Used by tests. Imports are looked up by exact key match -- callers must
+    supply pre-resolved keys (basename only).
     """
     if entry_basename not in sources:
         raise BundleError(f"entry not in sources: {entry_basename!r}")
@@ -72,33 +122,26 @@ def bundle(entry_basename: str, sources: dict[str, str]) -> str:
     on_stack: list[str] = []
     out: list[str] = []
 
-    def visit(basename: str) -> None:
-        if basename in on_stack:
-            cycle = " -> ".join(on_stack + [basename])
+    def visit(name: str) -> None:
+        if name in on_stack:
+            cycle = " -> ".join(on_stack + [name])
             raise BundleError(f"import cycle: {cycle}")
-        if basename in visited:
-            # Already inlined once; RouterOS would re-execute on duplicate
-            # /import, but for IaC we treat sources as load-once.
-            out.append(f"# rsc-bundle: skipped duplicate import of {basename}\n")
+        if name in visited:
+            out.append(f"# rsc-bundle: skipped duplicate import of {name}\n")
             return
-        if basename not in sources:
-            chain = " -> ".join(on_stack + [basename])
+        if name not in sources:
+            chain = " -> ".join(on_stack + [name])
             raise BundleError(f"missing import target: {chain}")
 
-        on_stack.append(basename)
-        visited.add(basename)
+        on_stack.append(name)
+        visited.add(name)
 
-        out.append(f"# >>> begin {basename}\n")
-        # Unfold first so dynamic imports become literal.
-        unfolded = unfold(sources[basename])
+        out.append(f"# >>> begin {name}\n")
+        unfolded = unfold(sources[name])
         for raw_line in unfolded.splitlines(keepends=True):
             match = IMPORT_RE.match(raw_line.rstrip("\r\n"))
             if match:
                 target = match.group("qname") or match.group("bname")
-                # Skip imports we still can't resolve statically (variable
-                # reference). Leave the line verbatim so RouterOS handles it
-                # at runtime if anyone actually uploads the bundled file
-                # alongside the originals.
                 if target.startswith("$"):
                     out.append(raw_line)
                     continue
@@ -107,7 +150,7 @@ def bundle(entry_basename: str, sources: dict[str, str]) -> str:
                 out.append(raw_line)
         if out and not out[-1].endswith("\n"):
             out.append("\n")
-        out.append(f"# <<< end {basename}\n")
+        out.append(f"# <<< end {name}\n")
 
         on_stack.pop()
 
