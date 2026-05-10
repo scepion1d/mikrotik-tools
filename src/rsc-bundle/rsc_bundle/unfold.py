@@ -27,14 +27,14 @@ import re
 
 # `:local NAME {` or `:global NAME {` starting an array literal. We capture
 # NAME and the position just past the opening brace.
-BINDING_START_RE = re.compile(
+_BINDING_START_RE = re.compile(
     r"^[ \t]*:(?:local|global)[ \t]+(?P<name>\w+)[ \t]*\{",
     re.MULTILINE,
 )
 
 # `:foreach VAR in=$ARR do={` opening a loop body. We capture the var, the
 # array name, and the position just past the opening brace of `do={`.
-FOREACH_START_RE = re.compile(
+_FOREACH_START_RE = re.compile(
     r"^(?P<indent>[ \t]*):foreach[ \t]+(?P<var>\w+)[ \t]+in=\$(?P<arr>\w+)[ \t]+do=\{",
     re.MULTILINE,
 )
@@ -63,7 +63,7 @@ def _collect_bindings(text: str) -> dict[str, list[str]]:
     Skips bindings whose body isn't purely a list of quoted string literals.
     """
     out: dict[str, list[str]] = {}
-    for match in BINDING_START_RE.finditer(text):
+    for match in _BINDING_START_RE.finditer(text):
         brace_pos = match.end() - 1  # position of the opening `{`
         try:
             close = _find_matching_brace(text, brace_pos)
@@ -82,7 +82,7 @@ def _unfold_once(text: str, bindings: dict[str, list[str]]) -> str:
     pos = 0
     n = len(text)
     while pos < n:
-        match = FOREACH_START_RE.search(text, pos)
+        match = _FOREACH_START_RE.search(text, pos)
         if not match:
             out.append(text[pos:])
             break

@@ -114,6 +114,12 @@ def flatten(text: str, *, substitute_vars: bool = True) -> str:
 
 
 def _collect_globals(text: str) -> dict[str, str]:
+    """Scan *text* for ``:global NAME "value"`` and return ``{name: value}``.
+
+    Bodies of helper functions (``:global NAME do={...}``), bare
+    declarations (``:global NAME``), and any non-string-literal RHS are
+    ignored.
+    """
     out: dict[str, str] = {}
     for line in _fold_continuations(text.splitlines()):
         match = _GLOBAL_ASSIGN_RE.match(line)
@@ -123,6 +129,13 @@ def _collect_globals(text: str) -> dict[str, str]:
 
 
 def _substitute_globals(text: str, vars_map: dict[str, str]) -> str:
+    """Replace every ``$NAME`` (word-bounded) in *text* with its value from *vars_map*.
+
+    Comment lines (``#``-prefixed) are skipped so secrets don't leak into
+    doc-strings that reference them by var name. Names are matched
+    longest-first so ``$adminPass`` is not partially matched by
+    ``$adminP``.
+    """
     if not vars_map:
         return text
     # Longest names first to avoid `$adminP` matching when `$adminPass`
@@ -153,6 +166,13 @@ def _substitute_globals(text: str, vars_map: dict[str, str]) -> str:
 
 
 def _strip_scripting(text: str) -> str:
+    """Drop ``:KEYWORD`` / ``$helper`` wrapper lines, preserving block bodies.
+
+    See the module docstring ("Strategy" section, step 3) for the rules.
+    The pass is line-oriented after folding ``\\``-continuations -- output
+    loses the original line wrapping but stays semantically equivalent
+    for ``rsc-diff`` and ``/import``.
+    """
     out: list[str] = []
     skip_close_depth = 0  # how many trailing `}` belong to stripped wrappers
     data_skip = 0  # > 0 while inside a `:local NAME { ... }` array literal
