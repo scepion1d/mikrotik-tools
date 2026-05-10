@@ -37,16 +37,17 @@ _FIND_RE = re.compile(r'\[find\s+(?P<key>[\w@-]+)(?P<op>[=~])(?P<val>.+)\]')
 def find_item(items, selector: str | None) -> Item | None:
     """Resolve a ``[find ...]`` selector to a single :class:`Item` in *items*.
 
-    Returns ``None`` for the wipe sentinel ``[find]``, malformed
-    selectors, or no match. Positional selectors (``@anon=N`` /
-    ``@pos=N``) are resolved by index into *items*; everything else is a
-    linear scan comparing the property in *items* against the selector
-    value (``=`` for exact match, ``~`` for substring).
+    Returns ``None`` for the wipe sentinels (``[find]`` /
+    ``[find !dynamic]`` / ``[find dynamic=no]``), malformed selectors,
+    or no match. Positional selectors (``@anon=N`` / ``@pos=N``) are
+    resolved by index into *items*; everything else is a linear scan
+    comparing the property in *items* against the selector value (``=``
+    for exact match, ``~`` for substring).
     """
     if selector is None:
         return None
     sel = selector.strip()
-    if sel == "[find]":
+    if sel in ("[find]", "[find !dynamic]", "[find dynamic=no]"):
         return None  # wipe sentinel
     m = _FIND_RE.match(sel)
     if not m:
@@ -106,7 +107,10 @@ def apply_patch(base: Config, patch_path: Path) -> Config:
         items = cfg.items_by_menu.setdefault(cur_menu, [])
 
         if verb == "remove":
-            if rest == "[find]":
+            # Wipe sentinels: bare `[find]` and the safer `[find !dynamic]` /
+            # `[find dynamic=no]` forms emitted for menus that may contain
+            # system-protected built-in rules (e.g. firewall chains).
+            if rest in ("[find]", "[find !dynamic]", "[find dynamic=no]"):
                 items.clear()
             elif rest.startswith("["):
                 bracket, after = _take_bracket(rest)

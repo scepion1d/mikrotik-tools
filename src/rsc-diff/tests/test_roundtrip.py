@@ -80,8 +80,8 @@ def test_ordered_menu_emits_wipe_then_add() -> None:
     # Renderer brackets the wipe-then-add block with section comments.
     assert "# 1. REMOVE OLD" in rendered
     assert "# 2. ADD NEW" in rendered
-    # The actual wipe line uses RouterOS-valid syntax.
-    assert "remove [find]" in rendered
+    # Wipe uses `dynamic=no` so RouterOS's built-in defconf rules survive.
+    assert "remove [find dynamic=no]" in rendered
 
 
 def test_ordered_menu_unchanged_emits_nothing() -> None:

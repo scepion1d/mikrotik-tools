@@ -59,7 +59,7 @@ def _render_op(op: Op) -> str:
     """Render a single :class:`Op` as one line of RouterOS script.
 
     Dispatch on ``op.kind``:
-      - ``wipe``   -> ``remove [find]``
+      - ``wipe``   -> ``remove [find dynamic=no]`` (skip system built-ins)
       - ``add``    -> ``add prop=val ...``
       - ``remove`` -> ``remove [find ...]``
       - ``reset``  -> ``reset [find ...] prop1 prop2 ...``
@@ -68,7 +68,19 @@ def _render_op(op: Op) -> str:
         (singletons emit bare ``set prop=val ...``)
     """
     if op.kind == "wipe":
-        return "remove [find]"
+        # `dynamic=no` excludes system-protected built-in rules (e.g. the
+        # `defconf:` entries RouterOS injects into firewall chains).
+        # `remove [find]` would try to remove them too and fail with
+        # `cannot remove builtin`, leaving the menu in a half-wiped
+        # state. The operator-added rules we actually want to clear are
+        # all dynamic=no.
+        #
+        # We use `dynamic=no` rather than the shorter `!dynamic` form
+        # because the latter is rejected by some RouterOS versions'
+        # script parser ("syntax error" inside the `[find ...]` body),
+        # while `dynamic=no` is the documented and universally accepted
+        # form for `find` queries.
+        return "remove [find dynamic=no]"
 
     if op.kind == "add":
         return "add " + _render_props(op.props)
