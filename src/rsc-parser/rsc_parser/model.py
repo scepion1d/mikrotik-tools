@@ -38,12 +38,12 @@ class Item:
 
         Resolution order (returns the FIRST match):
 
-        1. menu in :data:`MENUS_SINGLETON` -> the menu path itself
-        2. ``name=iac.x.y`` if menu is in :data:`MENUS_WITH_NAME`
-        3. iac-namespace token inside ``comment=`` -> ``comment~iac.x.y``
-        4. ``default-name=etherN`` for ``set [find default-name=...]`` rows
-        5. menu in :data:`MENUS_ORDERED` -> ``@pos=N``
-        6. fallback: ``name=value`` if any ``name=`` is set, else ``@anon=N``
+        0. menu in :data:`MENUS_SINGLETON` -> the menu path itself
+        1. ``name=iac.x.y`` if menu is in :data:`MENUS_WITH_NAME`
+        2. iac-namespace token inside ``comment=`` -> ``comment~iac.x.y``
+        3. ``default-name=etherN`` for ``set [find default-name=...]`` rows
+        4. menu in :data:`MENUS_ORDERED` -> ``@pos=N``
+        5. fallback: ``name=value`` if any ``name=`` is set, else ``@anon=N``
 
         The returned string is consumed by the diff emitter when building
         ``[find ...]`` selectors. It is NOT a bare iac id -- callers that
@@ -89,9 +89,11 @@ class Config:
     items_by_menu: dict[str, list[Item]] = field(default_factory=dict)
 
     def add(self, item: Item) -> None:
+        """Append *item* to the list under its menu, creating the bucket if needed."""
         self.items_by_menu.setdefault(item.menu, []).append(item)
 
     def menus(self) -> list[str]:
+        """Return menu paths in declaration order."""
         return list(self.items_by_menu.keys())
 
     def index(self, menu: str) -> dict[str, Item]:

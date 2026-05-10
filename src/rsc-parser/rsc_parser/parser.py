@@ -17,6 +17,7 @@ Does NOT interpret:
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
 from .model import Config, Item
@@ -128,11 +129,11 @@ def _consume_item(cfg: Config, menu: str, line: str) -> None:
         # `set telnet disabled=yes` -- first token is a positional id.
         first, _, rest = rest.partition(" ")
         props["__selector__"] = first
-        # The positional id IS the row identity for menus like /ip/service
-        # (built-in services keyed by name=ssh, name=telnet, ...). Surface
-        # it as `name=` so identity_key() can pick it up via MENUS_WITH_NAME.
-        # `setdefault` so an explicit `name=` later in the same line wins.
-        # Imported from upstream "Fix ids processing" during the refactor merge.
+        # The positional id is also the row identity for menus like
+        # /ip/service (rows keyed by name=ssh, name=telnet, ...). Surface
+        # it as `name=` so identity_key() can pick it up via
+        # MENUS_WITH_NAME. `setdefault` so an explicit `name=` later in
+        # the same line wins.
         props.setdefault("name", first)
         rest = rest.lstrip()
 
@@ -150,7 +151,7 @@ def _looks_like_kv(token: str) -> bool:
 # --- low-level lexing helpers ----------------------------------------------
 
 
-def _logical_lines(text: str):
+def _logical_lines(text: str) -> Iterator[str]:
     r"""Yield lines with ``\`` continuations folded into one.
 
     RouterOS treats ``\<newline><leading-whitespace>`` as a glue operator
@@ -209,7 +210,7 @@ def _take_bracket(s: str) -> tuple[str, str]:
     raise ValueError(f"unterminated bracket in: {s!r}")
 
 
-def _tokenise_kv(s: str):
+def _tokenise_kv(s: str) -> Iterator[tuple[str, str]]:
     """Yield ``(key, value)`` pairs from a string of ``key=value key2="..." key3=[...]``."""
     i = 0
     n = len(s)

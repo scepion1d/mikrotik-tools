@@ -42,11 +42,9 @@ MENUS_WITH_NAME: frozenset[str] = frozenset(
         "/ip/pool",
         "/ip/dhcp-server",
         # /ip/service rows have a stable user-visible `name` (the service
-        # name itself: telnet, ssh, winbox, ...); treating it as the
+        # name itself: telnet, ssh, winbox, ...). Treating it as the
         # identity key keeps the differ stable when /export and authored
-        # configs emit services in different orders. Originated upstream
-        # via scepion1d's "Fix ids processing" commit; ported into the
-        # canonical rsc_parser package during the refactor merge.
+        # configs emit services in different orders.
         "/ip/service",
         "/system/script",
     }

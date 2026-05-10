@@ -35,12 +35,6 @@ from .menus import IAC_PREFIX, MENUS_ORDERED, MENUS_SINGLETON, MENUS_WITH_NAME
 from .model import Item
 
 
-# Marker prefix on synthetic ids so :func:`is_synthetic` can recognise them
-# without re-running the resolution. Kept under the ``iac.`` namespace so
-# the id is still valid wherever a normal iac id would be.
-_SYNTH_MARKER = "iac."
-
-
 def entity_id(item: Item, position: int = 0) -> str:
     """Return a bare ``iac.x.y.z`` identifier for *item*.
 
@@ -52,12 +46,16 @@ def entity_id(item: Item, position: int = 0) -> str:
 
        - Singleton menu -> ``iac.<menu-dotted>``
          (e.g. ``/system/clock`` -> ``iac.system.clock``).
-       - ``set`` with ``default-name=etherN`` and no rename
+       - ``set [find KEY=VAL]`` -> ``iac.<menu-dotted>.<val>``
+         (covers ``[find default-name=ether1]`` -> ``iac.interface.ethernet.ether1``,
+         ``[find name=admin]`` -> ``iac.user.admin``, etc.).
+       - ``set <token> ...`` positional selector
+         -> ``iac.<menu-dotted>.<token>`` (e.g. ``set telnet ...``
+         -> ``iac.ip.service.telnet``). The parser surfaces the
+         positional token as ``__selector__`` so this falls under the
+         same branch as ``[find ...]``.
+       - ``default-name=etherN`` (no ``__selector__``)
          -> ``iac.<menu-dotted>.<default-name>``.
-       - ``set`` with positional selector (e.g. ``set telnet ...``)
-         -> ``iac.<menu-dotted>.<selector>``.
-       - ``set [find name=admin]`` (or any ``[find KEY=VAL]``)
-         -> ``iac.<menu-dotted>.<val>``.
        - Free-standing ``name=foo`` (not iac-prefixed)
          -> ``iac.<menu-dotted>.<name>``.
        - Ordered menus with no other id -> ``iac.<menu-dotted>.<position>``.
@@ -97,20 +95,16 @@ def entity_id(item: Item, position: int = 0) -> str:
     if default_name:
         return f"{IAC_PREFIX}{base}.{default_name}"
 
-    # 3d. positional `set <token> ...` (recorded as __selector__ already
-    # by the parser; no extra branch needed).
-
-    # 3e. free-standing name= (not iac-prefixed)
+    # 3d. free-standing name= (not iac-prefixed)
     if name:
         return f"{IAC_PREFIX}{base}.{name}"
 
-    # 3f. ordered menu position
+    # 3e. ordered menu position
     if item.menu in MENUS_ORDERED:
         return f"{IAC_PREFIX}{base}.{position}"
 
-    # 3g. last resort
+    # 3f. last resort
     return f"{IAC_PREFIX}{base}.@{position}"
-
 
 def is_synthetic(item: Item, position: int = 0) -> bool:
     """True if :func:`entity_id` would derive the id rather than read it.
@@ -118,7 +112,13 @@ def is_synthetic(item: Item, position: int = 0) -> bool:
     Returns True precisely when the item carries no usable iac-namespace
     identifier in its own ``name=`` or ``comment=`` -- meaning the id we
     use for diff matching is one we synthesised from menu + selector.
+
+    The *position* argument exists only to mirror :func:`entity_id`'s
+    signature so callers can use them interchangeably; it is not
+    consulted because the synthetic-vs-authored decision doesn't depend
+    on row ordering.
     """
+    del position  # signature parity with entity_id; not used here
     name = item.props.get("name", "").strip().strip('"')
     if name.startswith(IAC_PREFIX):
         return False
@@ -126,9 +126,6 @@ def is_synthetic(item: Item, position: int = 0) -> bool:
     for token in comment.replace(",", " ").split():
         if token.startswith(IAC_PREFIX):
             return False
-    # Used the position arg to match entity_id's signature; not consulted
-    # here because the answer is the same regardless of position.
-    del position
     return True
 
 
