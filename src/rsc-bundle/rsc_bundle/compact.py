@@ -15,33 +15,21 @@ Design choices
 - One physical line per operation (no ``\\`` continuations).
 - Menu path emitted once per group; items follow with no indentation.
 - No banner comments, no blank lines between groups (maximum density).
-- ``comment=`` properties are minified to just the first ``iac.*`` token
-  in their value when one is present; the human-readable suffix is
-  dropped. Items without an iac-namespace token in their comment have
-  the comment dropped entirely. Pass ``minify_comments=False`` to
-  preserve the original comment text verbatim.
-
-Why preserve iac.id tokens
---------------------------
-``rsc-diff`` matches items between two configs by identity. For items
-where identity comes from ``comment="iac.x.y -- ..."`` (e.g.
-``/ip/dhcp-server/lease`` rows, ``/ipv6/firewall/address-list`` rows,
-``/interface/list/member`` rows), losing the ``iac.x.y`` token would
-collapse identity to position, making any insert in the middle of an
-unordered menu look like every subsequent row changed. The minified
-``comment=iac.x.y`` keeps the diff reliable while shedding the noise.
+- ``comment=`` properties are preserved verbatim (with the standard
+  /export-style requoting). The bundle stays a faithful representation
+  of the authored source so ``rsc-diff`` against a router /export
+  produces a clean delta.
 
 Property quoting follows :func:`rsc_bundle.flatten._normalize_quoting`
 style: bare values when possible, quoted only when the value contains
-whitespace or shell-special characters. The minified ``iac.id`` tokens
-are bare by construction (no spaces).
+whitespace or shell-special characters.
 """
 
 from __future__ import annotations
 
 import re
 
-from rsc_parser import IAC_PREFIX, Config, Item
+from rsc_parser import Config, Item
 
 
 # Characters that force RouterOS to keep a value quoted in /export output.
@@ -50,16 +38,11 @@ from rsc_parser import IAC_PREFIX, Config, Item
 _NEEDS_QUOTE_RE = re.compile(r'[\s\[\]{}();\\"`#$<>|&?*]')
 
 
-def emit(cfg: Config, *, minify_comments: bool = True) -> str:
+def emit(cfg: Config) -> str:
     """Render *cfg* as compact one-line-per-op .rsc text.
 
-    Args:
-        cfg: parsed config (from :func:`rsc_parser.parse_text`).
-        minify_comments: when True (default), collapse any ``comment=``
-            value containing an iac-namespace token to just that token
-            and drop comments without one. When False, preserve the
-            authored ``comment=`` text verbatim (still drops surrounding
-            quotes when not needed by the bare-value rule).
+    Preserves all properties verbatim. Quoting is normalised to /export
+    style (bare when possible, quoted when the value needs it).
     """
     lines: list[str] = []
     for menu in cfg.menus():
@@ -68,12 +51,12 @@ def emit(cfg: Config, *, minify_comments: bool = True) -> str:
             continue
         lines.append(menu)
         for item in items:
-            lines.append(_render_item(item, minify_comments=minify_comments))
+            lines.append(_render_item(item))
     # Trailing newline so concat with other files is well-behaved.
     return "\n".join(lines) + "\n"
 
 
-def _render_item(item: Item, *, minify_comments: bool) -> str:
+def _render_item(item: Item) -> str:
     """Render one Item as ``add prop=val ...`` or ``set [...] prop=val ...``."""
     parts: list[str] = [item.verb]
 
@@ -86,31 +69,9 @@ def _render_item(item: Item, *, minify_comments: bool) -> str:
     for key, raw_value in item.props.items():
         if key == "__selector__":
             continue
-        value = _process_value(key, raw_value, minify_comments=minify_comments)
-        if value is None:
-            # Comment with no iac token AND minification on -> drop.
-            continue
-        parts.append(f"{key}={value}")
+        parts.append(f"{key}={_requote(_strip_quotes(raw_value))}")
 
     return " ".join(parts)
-
-
-def _process_value(key: str, raw: str, *, minify_comments: bool) -> str | None:
-    """Return the on-disk representation for one property value.
-
-    Returns ``None`` to signal "drop this property entirely" (used for
-    comments without an iac token when minification is on).
-    """
-    unquoted = _strip_quotes(raw)
-
-    if key == "comment" and minify_comments:
-        token = _first_iac_token(unquoted)
-        if token is None:
-            return None
-        # Synthesised bare token: never needs quoting.
-        return token
-
-    return _requote(unquoted)
 
 
 def _strip_quotes(value: str) -> str:
@@ -141,16 +102,3 @@ def _requote(value: str) -> str:
         # parser would have rejected unbalanced quotes earlier).
         return f'"{value}"'
     return value
-
-
-def _first_iac_token(text: str) -> str | None:
-    """Return the first ``iac.*`` token in *text*, or None if none present.
-
-    Strips trailing punctuation (``.``, ``,``, ``;``, ``:``) so a token
-    found at the end of a sentence ("...iac.foo.bar.") still yields the
-    bare identifier.
-    """
-    for raw_token in text.replace(",", " ").split():
-        if raw_token.startswith(IAC_PREFIX):
-            return raw_token.rstrip(".,;:")
-    return None

@@ -27,6 +27,12 @@ from .model import Config, Item
 SCRIPT_DIRECTIVE_RE = re.compile(r"^\s*(:|/import\b|/file\b)")
 
 
+# Matches `[find KEY=VALUE]` -- the simple equality form of a `set`
+# selector. Used by _consume_item to surface KEY=VALUE into props so the
+# identity-key resolution can find it.
+_FIND_KV_RE = re.compile(r'^\[find\s+(?P<key>[\w-]+)=(?P<val>[^\]]+)\]$')
+
+
 def parse_file(path: str | Path) -> Config:
     """Parse the file at *path* into a :class:`Config`."""
     return parse_text(Path(path).read_text(encoding="utf-8"))
@@ -124,6 +130,18 @@ def _consume_item(cfg: Config, menu: str, line: str) -> None:
     if verb == "set" and rest.startswith("["):
         selector, rest = _take_bracket(rest)
         props["__selector__"] = selector
+        # If the selector is `[find KEY=VAL]`, surface KEY=VAL into props
+        # so identity_key() resolves to a stable key (same trick as the
+        # positional branch below). Without this, `set [find name=admin]`
+        # against an /export that omits the admin row would fall through
+        # to `@anon=N` -- meaningless on the live router.
+        find_kv = _FIND_KV_RE.match(selector)
+        if find_kv:
+            key = find_kv.group("key")
+            val = find_kv.group("val").strip()
+            if val.startswith('"') and val.endswith('"'):
+                val = val[1:-1]
+            props.setdefault(key, val)
         rest = rest.lstrip()
     elif verb == "set" and rest and not _looks_like_kv(rest.split(" ", 1)[0]):
         # `set telnet disabled=yes` -- first token is a positional id.

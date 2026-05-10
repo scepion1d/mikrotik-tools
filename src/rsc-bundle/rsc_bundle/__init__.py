@@ -26,7 +26,7 @@ Library
     from rsc_bundle import bundle
 
     text = bundle("rsc/segmented")  # default pipeline
-    text = bundle("rsc/segmented", keep_comments=True)
+    text = bundle("rsc/segmented", flatten_output=False)  # raw concat
 
 The legacy import-inlining API (:func:`bundle_file`, :func:`bundle_inline`,
 :class:`BundleError`) is retained for tests and any caller still using
@@ -57,16 +57,12 @@ __version__ = "0.2.0"
 def bundle(
     profile_dir: str,
     *,
-    keep_comments: bool = False,
     flatten_output: bool = True,
 ) -> str:
     """Bundle a flat profile folder into a deploy-ready ``.rsc`` string.
 
     Args:
         profile_dir: path to the profile folder (e.g. ``rsc/segmented``).
-        keep_comments: when True, preserve the full ``comment="..."`` text
-            on each item; when False (default) minify to the bare
-            ``iac.id`` token and drop comments without one.
         flatten_output: when True (default), substitute ``:global`` vars,
             strip scripting wrappers, parse + re-emit one-line-per-op.
             When False, return the raw concatenated source.
@@ -77,7 +73,7 @@ def bundle(
         return text
     flat = flatten(text)
     cfg = parse_text(flat)
-    return _compact_emit(cfg, minify_comments=not keep_comments)
+    return _compact_emit(cfg)
 
 
 __all__ = [

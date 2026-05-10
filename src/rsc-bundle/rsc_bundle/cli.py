@@ -8,7 +8,7 @@ folder = one apply-able config.
 
 Usage::
 
-    rsc-bundle --profile <folder> [-o OUT] [--keep-comments] [--no-flatten]
+    rsc-bundle --profile <folder> [-o OUT] [--no-flatten]
 
 Pipeline (defaults)
 -------------------
@@ -21,12 +21,10 @@ Pipeline (defaults)
 3. :func:`rsc_parser.parse_text` -- parse the cleaned text into a
    :class:`~rsc_parser.Config`.
 4. :func:`rsc_bundle.compact.emit` -- render one line per operation,
-   minify ``comment=`` properties to bare ``iac.id`` tokens (drop the
-   human-readable suffix; drop comments without an iac token).
+   preserving every property verbatim.
 
-The result is the smallest faithful ``.rsc`` we can ship while preserving
-the identity tokens that ``rsc-diff`` needs to match items between
-snapshots.
+The result is the smallest faithful ``.rsc`` we can ship while keeping
+the authored content intact.
 
 Output path
 -----------
@@ -36,8 +34,6 @@ Output path
 
 Escape hatches
 --------------
-- ``--keep-comments`` -- preserve the original ``comment=`` text verbatim
-  (still bare-quoted via the standard /export-style normaliser).
 - ``--no-flatten``    -- skip flatten + parse + compact entirely; emit the
   raw concatenated source. Useful for debugging the loader and for
   bundles that must keep ``$var`` references for runtime substitution.
@@ -62,9 +58,9 @@ def main(argv: list[str] | None = None) -> int:
         prog="rsc-bundle",
         description=(
             "Bundle a flat RouterOS .rsc profile folder into one minimal "
-            "deploy-ready file. By default, $var references are substituted, "
-            "scripting wrappers are stripped, and `comment=` properties are "
-            "minified to their iac.id tokens."
+            "deploy-ready file. By default, $var references are substituted "
+            "and scripting wrappers are stripped; properties (including "
+            "comments) are preserved verbatim."
         ),
     )
     parser.add_argument(
@@ -86,15 +82,6 @@ def main(argv: list[str] | None = None) -> int:
             "output path. If a directory (or omitted -> ./out/), the "
             "filename is auto-generated as <profile>-<yymmdd>-<secs>.rsc. "
             "If a file path, used as-is."
-        ),
-    )
-    parser.add_argument(
-        "--keep-comments",
-        action="store_true",
-        help=(
-            "preserve the full `comment=\"...\"` text verbatim instead of "
-            "minifying to the bare iac.id token. Useful when you want the "
-            "bundle to read like the source."
         ),
     )
     parser.add_argument(
@@ -133,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
         # re-emit one-line-per-op.
         flat = flatten(raw)
         cfg = parse_text(flat)
-        text = compact_emit(cfg, minify_comments=not args.keep_comments)
+        text = compact_emit(cfg)
 
     out_path = _resolve_out_path(args.out, profile)
     try:

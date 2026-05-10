@@ -246,6 +246,98 @@ def test_computed_property_dropped_both_sides() -> None:
     assert all("network" not in op.props for op in ops), ops
 
 
+def test_set_with_find_emits_set_when_live_omits_row() -> None:
+    """Built-in rows like /user admin are omitted from /export when no
+    property differs from default. The candidate's `set [find name=admin]`
+    must still emit `set [find name=admin] ...`, not `add ...` (which
+    would create a second admin row -- broken)."""
+    from rsc_diff import parse_text, diff, emit
+
+    live = parse_text("")  # no /user rows at all
+    candidate = parse_text(
+        "/user\n"
+        "    set [find name=admin] password=secret\n"
+    )
+
+    ops = diff(live, candidate)
+    assert len(ops) == 1, ops
+    assert ops[0].kind == "set", ops
+    assert ops[0].menu == "/user", ops
+    rendered = emit(ops)
+    assert "set [find name=admin] password=secret" in rendered, rendered
+    # Critically: NO `add password=...` (would create a second user).
+    assert "add password" not in rendered, rendered
+
+
+def test_user_admin_is_never_removed() -> None:
+    """The admin row is built-in: removing it would lock the operator out.
+    A candidate that omits /user must NOT cause `remove [find name=admin]`."""
+    from rsc_diff import parse_text, diff
+
+    live = parse_text(
+        "/user\n"
+        "    set [find name=admin] comment=\"old admin\"\n"
+    )
+    candidate = parse_text("")  # candidate has no /user menu at all
+
+    ops = diff(live, candidate)
+    # No remove op against /user; the admin row is protected.
+    assert all(
+        not (op.kind == "remove" and op.menu == "/user")
+        for op in ops
+    ), ops
+
+
+def test_wifi_mac_address_is_computed() -> None:
+    """`/interface/wifi mac-address` is auto-derived for virtual APs.
+    The differ must NOT emit `reset mac-address` when the candidate is
+    silent -- doing so would kick paired clients off the SSID."""
+    from rsc_diff import Config, Item, diff
+
+    live = Config()
+    live.add(Item(menu="/interface/wifi", verb="add", props={
+        "name": "iac.wifi.iot.2g",
+        "master-interface": "iac.wifi.int.2g",
+        "mac-address": "D2:EA:11:40:F0:06",  # router auto-derived
+    }))
+    candidate = Config()
+    candidate.add(Item(menu="/interface/wifi", verb="add", props={
+        "name": "iac.wifi.iot.2g",
+        "master-interface": "iac.wifi.int.2g",
+        # no mac-address -- authored side never sets it
+    }))
+
+    ops = diff(live, candidate)
+    # No reset / set on mac-address.
+    assert all(
+        "mac-address" not in op.props for op in ops
+    ), ops
+
+
+def test_bridge_admin_mac_is_computed() -> None:
+    """`/interface/bridge admin-mac` is normally authored as a bracket
+    expression that RouterOS resolves at import time. The literal MAC
+    that ends up in /export should not look like drift against the
+    authored bracket form."""
+    from rsc_diff import Config, Item, diff
+
+    live = Config()
+    live.add(Item(menu="/interface/bridge", verb="add", props={
+        "name": "iac.bridge.lan",
+        "admin-mac": "D0:EA:11:40:F0:01",  # resolved by router at import
+    }))
+    candidate = Config()
+    candidate.add(Item(menu="/interface/bridge", verb="add", props={
+        "name": "iac.bridge.lan",
+        "admin-mac": "[/interface/ethernet get [find name=iac.ether.lan1] mac-address]",
+    }))
+
+    ops = diff(live, candidate)
+    assert all(
+        "admin-mac" not in op.props for op in ops
+    ), ops
+
+
 if __name__ == "__main__":
     test_parse_empty()
     test_parse_minimal()

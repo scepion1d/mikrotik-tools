@@ -11,6 +11,20 @@ from .model import MENUS_ORDERED, MENUS_SINGLETON, Config, Item, Op
 IDENTITY_PROPS: frozenset[str] = frozenset({"__selector__", "default-name"})
 
 
+# Built-in rows that must never be removed: the row exists from boot and
+# RouterOS would either reject the remove or break administration if it
+# succeeded. The differ skips emitting `remove [find ...]` ops whose
+# `(menu, identity_key)` matches an entry here.
+#
+# Entries use the same identity_key format the rest of the differ
+# produces (e.g. "name=admin"), so a candidate that simply omits the row
+# from /export results in no destructive op.
+_PROTECTED_ROWS: frozenset[tuple[str, str]] = frozenset({
+    # /user admin -- removing the only admin would lock out the operator.
+    ("/user", "name=admin"),
+})
+
+
 def diff(old: Config, new: Config, *, strict: bool = False, lenient_defaults: bool = False) -> list[Op]:
     """Compute ops to transform *old* into *new*.
 
@@ -132,6 +146,10 @@ def _diff_menu_replace(
                 kind="add",
                 menu=menu,
                 identity_key=item.identity_key(pos),
+                # Wipe-then-add always emits `add` ops -- the new rows
+                # don't exist yet on the router, so identity props (name,
+                # default-name, etc.) must stay in the prop list to
+                # create them. Don't pass identity_key here.
                 props=_emit_props(menu, item.props, strict=strict),
             )
         )
@@ -176,19 +194,36 @@ def _normalise_props(
 
 
 def _emit_props(
-    menu: str, props: dict[str, str], *, strict: bool
+    menu: str, props: dict[str, str], *, strict: bool,
+    identity_key: str | None = None,
 ) -> dict[str, str]:
     """Strip identity + computed + (unless strict) default-valued props.
 
     Used when emitting an `add` op so the patch doesn't restate values
     that the router would interpret as no-ops anyway. Returns the raw
     string values (no quote-stripping) since these are written back out.
+
+    *identity_key* (when given) is the diff-op's selector key string
+    (e.g. ``"name=admin"``). The matching prop is dropped from the output
+    -- it would be redundant with the ``[find ...]`` selector the emitter
+    will render, and worse, on built-in rows like ``/user admin`` it
+    would render as ``set [find name=admin] name=admin password=...``
+    which RouterOS rejects (can't ``set`` an identity field).
     """
+    # Map "name=admin" -> ("name", "admin") for the redundancy check below.
+    selector_key = selector_val = None
+    if identity_key and "=" in identity_key and not identity_key.startswith("@"):
+        selector_key, _, selector_val = identity_key.partition("=")
+
     out: dict[str, str] = {}
     for k, v in props.items():
         if k in IDENTITY_PROPS:
             continue
         if is_computed(menu, k):
+            continue
+        if k == selector_key and _normalise_value(v) == selector_val:
+            # Already conveyed by [find KEY=VAL]; emitting it would be
+            # a no-op or worse, an attempt to re-set an identity field.
             continue
         if not strict:
             normalised = _normalise_value(v)
@@ -219,21 +254,43 @@ def _diff_menu_per_key(
         # positional removes in DESCENDING order; named removes keep their
         # alphabetical order (those are stable under shifts).
         for key in sorted(old_keys - new_keys, key=_remove_sort_key):
+            if (menu, key) in _PROTECTED_ROWS:
+                # Built-in row (e.g. /user admin). Removing it would
+                # lock the operator out / break admin access. Skip.
+                continue
             ops.append(Op(kind="remove", menu=menu, identity_key=key))
 
-    # Added: in new but not old. Singletons emit `set` instead.
+    # Added: in new but not old. Three sub-cases:
+    #   - singleton menu        -> always `set` (one implicit row)
+    #   - item.verb == "set"    -> still `set [find ...]` even though the
+    #                              menu has no matching row in old. This
+    #                              handles built-in rows (e.g. /user admin,
+    #                              /interface/ethernet etherN, /ip/service
+    #                              telnet) that exist on the live router
+    #                              but are omitted from /export when no
+    #                              property differs from default. The
+    #                              authored side's `set [find ...]` is
+    #                              the right command regardless.
+    #   - otherwise             -> `add prop=val ...`
     for key in sorted(new_keys - old_keys):
         item = new_idx[key]
-        if menu in MENUS_SINGLETON:
+        if menu in MENUS_SINGLETON or item.verb == "set":
+            # `set [find KEY=VAL] ...` -- pass identity_key so the
+            # synthetic KEY=VAL prop the parser injected gets stripped
+            # (it's already conveyed by the [find ...] selector).
             ops.append(
                 Op(
                     kind="set",
                     menu=menu,
                     identity_key=key,
-                    props=_emit_props(menu, item.props, strict=strict),
+                    props=_emit_props(menu, item.props, strict=strict,
+                                      identity_key=key),
                 )
             )
         else:
+            # `add ...` -- this row doesn't exist on the router yet, so
+            # ALL props (including identity ones like name=) must be
+            # present to create it. Don't pass identity_key.
             ops.append(
                 Op(
                     kind="add",

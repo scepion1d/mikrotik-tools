@@ -99,6 +99,22 @@ MENU_COMPUTED: dict[str, frozenset[str]] = {
     # Including it in a diff would emit a `set network=...` op, which
     # RouterOS would either reject or silently override at apply time.
     "/ip/address": frozenset({"network"}),
+
+    # /interface/wifi `mac-address` on a virtual AP (master-interface=wifiN)
+    # is auto-derived by RouterOS from the master's base MAC with the
+    # locally-administered bit set. Resetting it would force the VAP to
+    # pick a new MAC on next bring-up, which kicks paired clients off
+    # the SSID. The authored .rsc never sets it; live /export carries it.
+    "/interface/wifi": frozenset({"mac-address"}),
+
+    # /interface/bridge `admin-mac` is normally authored as a bracket
+    # expression (`admin-mac=[/interface/ethernet get [find name=...]
+    # mac-address]`) which RouterOS evaluates at /import time and stores
+    # as a literal MAC. The candidate keeps the bracket form, live keeps
+    # the literal -- always-different by string compare. Treating it as
+    # computed sidesteps the noise; the value is locked at first boot
+    # and shouldn't drift in practice.
+    "/interface/bridge": frozenset({"admin-mac"}),
 }
 
 

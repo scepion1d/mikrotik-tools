@@ -35,7 +35,10 @@ def test_emit_one_line_per_op() -> None:
     assert "\n\n" not in out
 
 
-def test_emit_minifies_iac_comment_to_token() -> None:
+def test_emit_preserves_iac_comment_verbatim() -> None:
+    """comment= is preserved as authored. The bundle stays a faithful
+    representation of the source so rsc-diff against /export gets a
+    clean delta."""
     cfg = Config()
     cfg.add(Item(menu="/ip/dhcp-server/lease", verb="add", props={
         "address": "192.168.10.5",
@@ -43,13 +46,12 @@ def test_emit_minifies_iac_comment_to_token() -> None:
         "comment": '"iac.lease.int.5 -- SAW"',
     }))
     out = emit(cfg)
-    # Long human-readable suffix is gone; iac token survives as identity.
-    assert "comment=iac.lease.int.5" in out
-    assert "SAW" not in out
-    assert ' -- ' not in out
+    assert 'comment="iac.lease.int.5 -- SAW"' in out
 
 
-def test_emit_drops_comment_without_iac_token() -> None:
+def test_emit_preserves_non_iac_comment() -> None:
+    """Comments without an iac token must NOT be dropped (a previous
+    minify-default behaviour silently lost them)."""
     cfg = Config()
     cfg.add(Item(menu="/user", verb="set", props={
         "__selector__": "[find name=admin]",
@@ -57,22 +59,9 @@ def test_emit_drops_comment_without_iac_token() -> None:
         "comment": '"Default admin"',
     }))
     out = emit(cfg)
-    # Comment dropped; identity comes from the [find ...] selector.
-    assert "comment" not in out
-    assert "Default admin" not in out
+    assert 'comment="Default admin"' in out
     assert "set [find name=admin]" in out
     assert "password=secret" in out
-
-
-def test_emit_keep_comments_preserves_full_text() -> None:
-    cfg = Config()
-    cfg.add(Item(menu="/ip/dhcp-server/lease", verb="add", props={
-        "address": "192.168.10.5",
-        "comment": '"iac.lease.int.5 -- SAW"',
-    }))
-    out = emit(cfg, minify_comments=False)
-    # Quotes preserved because the value contains whitespace.
-    assert 'comment="iac.lease.int.5 -- SAW"' in out
 
 
 def test_emit_preserves_set_selector() -> None:
@@ -136,7 +125,7 @@ def test_emit_skips_empty_menu() -> None:
 # --- end-to-end bundle() ----------------------------------------------------
 
 
-def test_bundle_substitutes_vars_and_minifies() -> None:
+def test_bundle_substitutes_vars_and_preserves_comments() -> None:
     out = bundle(str(FIX))
     # Variable substitution: $adminCidrs -> "192.168.10.2,192.168.10.3"
     # The comma-separated value has no whitespace, so it stays bare.
@@ -146,12 +135,11 @@ def test_bundle_substitutes_vars_and_minifies() -> None:
     assert "set name=TestRouter" in out
     # $adminPass -> "secret-pw"
     assert "password=secret-pw" in out
-    # iac comment minified to bare token.
-    assert "comment=iac.list.wan" in out
-    # No human-readable suffix survived.
-    assert "WAN uplink" not in out
-    # Default admin comment dropped (no iac token).
-    assert "Default admin" not in out
+    # Comments preserved verbatim (with their iac id token + description).
+    assert 'comment="iac.list.wan -- WAN uplink"' in out
+    assert "WAN uplink" in out
+    # Default admin comment also survives.
+    assert "Default admin" in out
     # No script wrappers leaked through.
     assert ":global" not in out
     assert ":local" not in out
@@ -173,12 +161,6 @@ def test_bundle_preserves_identity_for_diffability() -> None:
     assert eth.props["__selector__"] == "[find default-name=ether1]"
 
 
-def test_bundle_keep_comments_flag() -> None:
-    out = bundle(str(FIX), keep_comments=True)
-    # Now the human-readable suffix survives.
-    assert "WAN uplink" in out
-
-
 def test_bundle_no_flatten_keeps_globals() -> None:
     out = bundle(str(FIX), flatten_output=False)
     # Raw concat: :global lines and $var refs survive untouched.
@@ -189,7 +171,8 @@ def test_bundle_no_flatten_keeps_globals() -> None:
 
 
 def test_bundle_output_smaller_than_source() -> None:
-    """Compact output should be materially smaller than the raw concat."""
+    """Compact output should be materially smaller than the raw concat
+    (banners + scripting glue + line wrapping all gone)."""
     raw = bundle(str(FIX), flatten_output=False)
     minimized = bundle(str(FIX))
     assert len(minimized) < len(raw)
