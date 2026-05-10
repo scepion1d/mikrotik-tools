@@ -13,30 +13,27 @@ foreach ($tool in Get-ChildItem -Directory (Join-Path $root 'src')) {
     Write-Host "==> $($tool.Name)" -ForegroundColor Cyan
     & $build
 
-    $scripts = Join-Path $tool.FullName '.venv\Scripts'
-
-    # Source of truth for what to expose: [project.scripts] in pyproject.toml,
-    # which setuptools materializes into *.egg-info/entry_points.txt as the
-    # [console_scripts] section. Link every one of them, not just <tool>.exe
-    # (e.g. rsc-diff also ships rsc-diff-verify).
-    $names = @()
-    $epFiles = Get-ChildItem -Path $tool.FullName -Filter 'entry_points.txt' -Recurse -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -like '*\*.egg-info\entry_points.txt' }
-    foreach ($ep in $epFiles) {
-        $inSection = $false
-        foreach ($line in Get-Content -LiteralPath $ep.FullName) {
-            $t = $line.Trim()
-            if ($t -match '^\[(.+)\]$') { $inSection = ($Matches[1] -eq 'console_scripts'); continue }
-            if (-not $inSection) { continue }
-            if ($t -eq '' -or $t.StartsWith('#')) { continue }
-            $name = ($t -split '=', 2)[0].Trim()
-            if ($name) { $names += $name }
+    # Library-only packages (e.g. rsc-parser) declare no [project.scripts]
+    # and intentionally produce no console exe. Detect that and skip the
+    # bin-linking step; otherwise the missing .exe would print a warning.
+    $pyproject = Join-Path $tool.FullName 'pyproject.toml'
+    if (Test-Path -LiteralPath $pyproject) {
+        $hasScripts = Select-String -LiteralPath $pyproject `
+            -Pattern '^\s*\[project\.scripts\]' -Quiet
+        if (-not $hasScripts) {
+            Write-Host "    (library-only, no console script)"
+            continue
         }
     }
-    $names = $names | Sort-Object -Unique
-    if (-not $names) {
-        # Fallback: legacy convention of one script named after the tool.
-        $names = @($tool.Name)
+
+    $scripts = Join-Path $tool.FullName '.venv\Scripts'
+    
+    # Convention: one console script per tool, named "<tool>.exe", produced
+    # by uv sync from [project.scripts] in pyproject.toml.
+    $exe = Join-Path $scripts "$($tool.Name).exe"
+    if (-not (Test-Path -LiteralPath $exe)) {
+        Write-Warning "no $($tool.Name).exe in $scripts"
+        continue
     }
 
     foreach ($name in $names) {

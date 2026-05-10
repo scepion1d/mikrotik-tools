@@ -109,7 +109,7 @@ def bundle_file(entry: str | Path, root: str | Path | None = None) -> str:
     return "".join(out)
 
 
-def bundle(entry_basename: str, sources: dict[str, str]) -> str:
+def bundle_inline(entry_basename: str, sources: dict[str, str]) -> str:
     """Bundle from an in-memory ``{basename: text}`` map.
 
     Used by tests. Imports are looked up by exact key match -- callers must

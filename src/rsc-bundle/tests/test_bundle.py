@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from rsc_bundle import BundleError, bundle, bundle_file  # noqa: E402
+from rsc_bundle import BundleError, bundle_inline, bundle_file  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures"
 
@@ -40,7 +40,7 @@ def test_indented_import_resolved() -> None:
         "x.rsc": "    /import file-name=y.rsc\n",
         "y.rsc": ":log info y\n",
     }
-    out = bundle("x.rsc", sources)
+    out = bundle_inline("x.rsc", sources)
     assert ":log info y" in out
     assert "/import file-name=" not in out
 
@@ -48,7 +48,7 @@ def test_indented_import_resolved() -> None:
 def test_missing_target_raises() -> None:
     sources = {"a.rsc": "/import file-name=missing.rsc\n"}
     try:
-        bundle("a.rsc", sources)
+        bundle_inline("a.rsc", sources)
     except BundleError as exc:
         assert "missing.rsc" in str(exc)
         return

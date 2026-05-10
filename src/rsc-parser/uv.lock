@@ -210,32 +210,15 @@ wheels = [
 ]
 
 [[package]]
-name = "rsc-diff"
-version = "0.1.0"
+name = "rsc-parser"
+version = "0.2.0"
 source = { editable = "." }
-dependencies = [
-    { name = "rsc-parser" },
-]
 
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
-
-[package.metadata]
-requires-dist = [{ name = "rsc-parser", editable = "../rsc-parser" }]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=9.0.3" },
-    { name = "pytest-cov", specifier = ">=5" },
-]
-
-[[package]]
-name = "rsc-parser"
-version = "0.2.0"
-source = { editable = "../rsc-parser" }
 
 [package.metadata]
 

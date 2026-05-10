@@ -1,12 +1,12 @@
 [project]
-name = "rsc-deploy"
-version = "0.1.0"
-description = "Upload RouterOS .rsc files over SSH/SFTP"
+name = "rsc-parser"
+version = "0.2.0"
+description = "Shared parser + identity model for RouterOS .rsc tooling"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "rsc-deploy contributors" }]
-keywords = ["routeros", "mikrotik", "iac", "deploy", "ssh", "sftp"]
+authors = [{ name = "rsc-parser contributors" }]
+keywords = ["routeros", "mikrotik", "iac", "parser", "config"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: System Administrators",
@@ -20,9 +20,7 @@ classifiers = [
     "Topic :: System :: Systems Administration",
     "Typing :: Typed",
 ]
-dependencies = [
-    "paramiko>=3.4",
-]
+dependencies = []
 
 [dependency-groups]
 # Installed by `uv sync` (default group). Excluded from a `--no-dev` build.
@@ -35,11 +33,8 @@ dev = [
 # Per-tool measurement scope. The actual data file path is set per-run
 # via the COVERAGE_FILE env var in tools/test.ps1 (so each tool writes
 # a unique file under tools/.coverage-data/, ready for `coverage combine`).
-source = ["rsc_deploy"]
+source = ["rsc_parser"]
 branch = true
-
-[project.scripts]
-rsc-deploy = "rsc_deploy.cli:main"
 
 [build-system]
 requires = ["setuptools>=61"]
@@ -47,7 +42,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["rsc_deploy*"]
+include = ["rsc_parser*"]
 
 [tool.setuptools.package-data]
-rsc_deploy = ["py.typed"]
+rsc_parser = ["py.typed"]

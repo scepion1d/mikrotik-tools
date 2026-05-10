@@ -84,14 +84,25 @@ _ELSE_CONT_RE = re.compile(r"^[ \t]*\}[ \t]*else[ \t]*=[ \t]*\{[ \t]*$")
 _DO_BLOCK_RE = re.compile(r"do[ \t]*=[ \t]*\{")
 
 
-def flatten(text: str) -> str:
+def flatten(text: str, *, substitute_vars: bool = True) -> str:
     """Resolve ``:global`` vars and strip scripting noise from *text*.
 
     Returns a string that contains only RouterOS config statements,
     comments, and blank lines.
+
+    Args:
+        text: bundled .rsc text to clean up.
+        substitute_vars: when True (default), every ``$NAME`` is replaced
+            by the literal value of the corresponding ``:global NAME
+            "value"`` assignment. When False, ``$NAME`` references survive
+            into the output -- the bundle then expects the operator (or a
+            companion secrets file) to define those globals before
+            ``/import``-ing it. Scripting-strip and quote normalisation
+            run regardless.
     """
-    vars_map = _collect_globals(text)
-    text = _substitute_globals(text, vars_map)
+    if substitute_vars:
+        vars_map = _collect_globals(text)
+        text = _substitute_globals(text, vars_map)
     text = _strip_scripting(text)
     text = _normalize_quoting(text)
     return text

@@ -49,8 +49,17 @@ MENU_DEFAULTS: dict[str, dict[str, str]] = {
     # authored `protocol-mode=rstp` was OMITTED from the router's
     # /export output -- which only happens when the value equals the
     # default. See out/stable-7.54.backup.rsc /interface bridge section.
+    #
+    # /interface/bridge vlan-filtering: confirmed by the rsc-diff e2e
+    # roundtrip test (Phase 4 introduction). Going segmented->basic emits
+    # `set vlan-filtering=no` to drop the property; without this default
+    # the simulator's post-apply state has `vlan-filtering=no` while the
+    # target (basic) is silent on it, producing 1 residual op. Adding
+    # this entry resolves the drift -- consistent with /export omitting
+    # `vlan-filtering` whenever it equals `no`.
     "/interface/bridge": {
         "protocol-mode": "rstp",
+        "vlan-filtering": "no",
     },
     # /ip/dhcp-server/lease lease-time: same evidence path.
     # `0s` is RouterOS's documented "static / no expiry" default for

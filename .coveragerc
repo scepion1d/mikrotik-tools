@@ -1,0 +1,35 @@
+# Top-level coverage config used during the COMBINE + REPORT step.
+#
+# Each tool's pyproject.toml [tool.coverage.run] block writes parallel data
+# files into ../../.coverage-data/.coverage.* (relative to that tool).
+# After all tool test suites have run, tools/test.ps1 invokes
+# `coverage combine` + `coverage report` from THIS directory; that's when
+# the settings below take effect.
+#
+# Per-tool [tool.coverage.run] blocks decide what gets MEASURED;
+# this file decides how the combined data is RENDERED.
+[run]
+data_file = .coverage-data/.coverage
+
+[paths]
+# Map per-tool source paths to a single canonical name so the combined
+# report doesn't list the same package under multiple paths.
+source =
+    src/rsc-parser/rsc_parser
+    src/rsc-bundle/rsc_bundle
+    src/rsc-diff/rsc_diff
+    src/rsc-deploy/rsc_deploy
+
+[report]
+show_missing = true
+skip_empty = true
+# Lines that should never count against coverage: defensive imports,
+# __all__ assignments, type-checking-only branches, abstract bodies.
+exclude_lines =
+    pragma: no cover
+    raise NotImplementedError
+    if TYPE_CHECKING:
+    if __name__ == .__main__.:
+
+[html]
+directory = .coverage-html

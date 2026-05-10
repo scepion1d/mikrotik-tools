@@ -28,14 +28,19 @@ Template at `.env.example`.
 
 ## CLI
 
-```powershell
-..\..\bin\rsc-deploy.cmd --src ..\..\rsc                        # upload everything (recursive)
-..\..\bin\rsc-deploy.cmd --src ..\..\rsc --dry-run              # show what would happen
-..\..\bin\rsc-deploy.cmd --src ..\..\out\<bundle>.rsc           # upload one file
-..\..\bin\rsc-deploy.cmd --src ..\..\rsc --no-clean             # additive (don't drop previous .rsc)
-```
+```text
+usage: rsc-deploy [-h] --src SRC [--env ENV] [--dry-run] [--no-clean] [-v]
 
-`--src` accepts a file or directory. Dirs walked recursively, files uploaded by basename (flat-flash convention).
+Upload RouterOS .rsc files over SSH/SFTP.
+
+options:
+  -h, --help     show this help message and exit
+  --src SRC      source path (a .rsc file or a directory walked recursively)
+  --env ENV      path to .env file (default: walk up from cwd looking for .env)
+  --dry-run      report what would happen without touching the router
+  --no-clean     skip deleting existing *.rsc on flash before upload
+  -v, --verbose  -v INFO logs (default WARNING); -vv DEBUG
+```
 
 ## Library
 
@@ -47,10 +52,10 @@ settings = load_env(Path(".env"))
 deploy(src=Path("rsc"), settings=settings, dry_run=False, clean=True)
 ```
 
-## Caveats
+## Known issues
 
+- **BLOCKED end-to-end** (see banner above). Network code untested against a real router; tests cover `.env` parsing only.
 - **Password auth only.** No key auth.
 - **No host-key verification** (TOFU via `AutoAddPolicy`). Don't use over untrusted networks.
 - **`--clean` deletes every `*.rsc` on flash root.** Backups (type=`backup` in `/file/print`) are filtered out.
-- **No apply trigger.** After upload, run `/import file-name=...` manually.
-- **Network code untested.** Tests cover `.env` parsing only.
+- **No apply trigger.** After upload, run `/import file-name=…` manually.

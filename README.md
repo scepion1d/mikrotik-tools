@@ -1,100 +1,112 @@
 # mikrotik-tools
 
-Personal RouterOS IaC for a **MikroTik C53UiG+5HPaxD2HPaxD** on RouterOS 7.20+.
-Three Python tools under `tools/` to bundle / diff / deploy.
+Python CLIs + libraries for working with RouterOS `.rsc` configs: bundle a profile folder into one minimal file, diff two configs into an apply-able patch, deploy `.rsc` files over SSH/SFTP. All tools share a single parser/identity model.
+
+## Tools
+
+| Tool                                  | One-liner                                                                                                |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| [`rsc-parser`](src/rsc-parser/)       | **Library.** Parse `.rsc` → indexed `Config`, resolve stable `iac.*` ids (with synthetic fallback).      |
+| [`rsc-bundle`](src/rsc-bundle/)       | **CLI + lib.** Bundle a flat `rsc/<profile>/` folder into one minimal deploy-ready `.rsc`.               |
+| [`rsc-diff`](src/rsc-diff/)           | **CLI + lib.** Diff two `.rsc` files into a patch; e2e roundtrip mode emits + verifies fwd/back patches. |
+| [`rsc-deploy`](src/rsc-deploy/)       | **CLI + lib.** Upload `.rsc` files over SSH/SFTP. Currently **blocked** (see its README).                |
 
 ## Layout
 
 ```
-mikrotik-tools/
+tools/
 ├── src/
-│   ├── rsc-bundle/          inline /imports + flatten scripting -> single .rsc
-│   ├── rsc-diff/            file-vs-file differ + verifier
-│   └── rsc-deploy/          SSH/SFTP uploader (BLOCKED, see below)
-├── out/                     gitignored: bundles, patches, live exports
+│   ├── rsc-parser/          shared library
+│   ├── rsc-bundle/          depends on rsc-parser
+│   ├── rsc-diff/            depends on rsc-parser
+│   └── rsc-deploy/          standalone (paramiko)
 ├── bin/                     gitignored: tool shims (.cmd / symlink)
 └── build.ps1                sync all tools, refresh shims in bin/
 ```
 
-## End-to-end flow
+## Dependencies
+
+- **Python ≥ 3.10**
+- **[uv](https://docs.astral.sh/uv/)** for venv + dependency management (one venv per tool under `src/<tool>/.venv/`)
+- Runtime:
+  - `rsc-parser` / `rsc-bundle` / `rsc-diff` — zero external deps
+  - `rsc-deploy` — `paramiko`
+- Dev: `pytest` (per-tool dev dependency group)
+
+The repo-root `build.ps1` runs each tool's `build.ps1` (which calls `uv sync`), then symlinks (or `.cmd`-shims, when symlink privilege is missing) each console script into `tools/bin/`.
+
+## Install
 
 ```powershell
-# 1. one-time: build tools, drop shims into bin/
-.\build.ps1
+.\build.ps1            # syncs all tools, refreshes bin\
+.\build.ps1            # idempotent; re-run after `git pull`
+```
 
-# 2. bundle a modular config -> single self-contained .rsc in out/
-.\bin\rsc-bundle.cmd --mainScript <config>.rsc --out out
-# -> out\<config>-YYMMDD-XXXXX.rsc   (no /import lines, vars resolved, scripting stripped)
+Per-tool reinstall:
 
-# 3. capture live router state
+```powershell
+cd src\rsc-bundle
+.\build.ps1            # uv sync this tool only
+.\build.ps1 -Clean     # nuke .venv first
+```
+
+## Usage
+
+End-to-end pipeline:
+
+```powershell
+# 1. bundle a profile -> single self-contained .rsc
+.\bin\rsc-bundle.cmd --profile ..\rsc\segmented -o ..\out
+# -> ..\out\segmented-YYMMDD-XXXXX.rsc
+
+# 2. capture live router state
 #    (in Winbox terminal): /export terse file=live
-#    drag /file/live.rsc off the router into out\live.rsc
+#    drag /file/live.rsc off the router into ..\out\live.rsc
 
-# 4. compute rollforward + rollback patches
-$candidate = (Get-ChildItem out\<config>-*.rsc | Sort Name | Select -Last 1).FullName
-.\bin\rsc-diff.cmd out\live.rsc $candidate --lenient -o out\rollforward.rsc
-.\bin\rsc-diff.cmd $candidate out\live.rsc --lenient -o out\rollback.rsc
+# 3. emit + verify both patches in one go
+$candidate = (Get-ChildItem ..\out\segmented-*.rsc | Sort Name | Select -Last 1).FullName
+.\bin\rsc-diff.cmd --old ..\out\live.rsc --new $candidate `
+    --rollforward ..\out\rollforward.rsc `
+    --rollback   ..\out\rollback.rsc `
+    --lenient
+# Both legs must report "OK -- differ reports no residual drift" before proceeding.
 
-# 5. semantic round-trip check
-.\bin\rsc-diff-verify.cmd --lenient
-# OK on both legs = patches transform live <-> candidate cleanly
-
-# 6. apply on router (manual until rsc-deploy is unblocked)
-#    upload out\rollforward.rsc via Winbox Files panel, then in terminal:
+# 4. apply on router
+#    (rsc-deploy is blocked; until then, upload via Winbox Files panel + terminal:)
 #    /import file-name=rollforward.rsc
 ```
 
-For a fresh device install, use the bundle directly:
+Per-tool details, full `--help` output, and known issues live in each tool's README.
 
-```routeros
-/system/reset-configuration no-defaults=yes skip-backup=yes \
-    run-after-reset=<config>-260509-XXXXX.rsc
+## Tests + coverage
+
+Run all four tool test suites with combined coverage from `tools/`:
+
+```powershell
+.\test.ps1                      # all tools, combined coverage report
+.\test.ps1 -Tools rsc-bundle    # one tool only (still produces coverage)
+.\test.ps1 -NoCoverage          # skip the coverage step
+.\test.ps1 -Html                # also write tools\.coverage-html\
+.\test.ps1 -FailUnder 80        # exit 2 if total coverage < 80%
 ```
 
-## Conventions
+`test.ps1` runs each tool's `pytest` in its own venv (so dependency isolation is preserved) and points each run's `COVERAGE_FILE` at a unique file under `tools/.coverage-data/`. After all suites finish, it runs `coverage combine` + `coverage report` against the central `.coveragerc`. The HTML report (when `-Html`) lands in `tools/.coverage-html/`.
 
-### Naming (`iac.<type>.<id>`)
+Per-tool coverage measurement is configured in each `pyproject.toml` under `[tool.coverage.run]` (just the `source =` package name and `branch = true`); the central `.coveragerc` controls report formatting and the HTML output dir.
 
-Every config item carries a stable identifier so configs can be diffed and patched without position-based matching.
+Single-tool, ad-hoc:
 
-| Item kind | Identity carrier |
-|---|---|
-| Items with `name=` field | `name=iac.<type>.<id>` |
-| Items without `name=` (firewall rules, leases, IPv6 list entries) | `comment` begins with `iac.<type>.<id>` |
-| Built-ins being renamed (`etherN` / `wifiN`) | `[find default-name=...]` **only at the rename point** |
-| Singletons (`/ip/dns`, `/system/clock`, `/disk/settings`, ...) | the menu path |
+```powershell
+cd src\rsc-bundle
+uv run pytest -q                # no coverage
+uv run pytest -q --cov          # tool-local coverage report
+```
 
-### File responsibilities
+## Status
 
-| File | Commit? |
-|---|---|
-| `<config>.rsc` — orchestrator | yes |
-| `vars.rsc` — non-sensitive tunables | yes |
-| `secrets.rsc` — credentials | **no** (gitignored) |
-| `helpers/*.rsc` — reusable functions | yes |
-| `modules/NN-area.rsc` — config slices in numeric order | yes |
-
-`secrets.rsc` and `vars.rsc` self-validate at import via `$iacLogError`.
-
-## Recovery
-
-If the router becomes unreachable:
-
-1. **MAC-Winbox** to the bridge MAC printed on the device label (LAN-only by default).
-2. `/log print where message~"iac\\."` — see what the orchestrator did.
-3. `/system/reset-configuration` — back to RouterOS defconf.
-4. Hold the reset button on power-up for hard factory reset.
-
-## Status / known issues
-
-| Area | State |
-|---|---|
-| `rsc-bundle` | ✅ working. Inlines imports, unfolds `:foreach`, resolves `:global` vars, strips scripting wrappers, normalizes quoting to match `/export` style. |
-| `rsc-diff` | ✅ usable for live-vs-candidate. Identity-based matching; defaults table for known props; `--strict` (no normalization) and `--lenient` (treat explicit-neutral-vs-missing as equal) flags. |
-| `rsc-diff-verify` | ✅ working. Re-runs the differ on `apply_patch(live, fwd) == candidate` to score round-trip. |
-| `rsc-deploy` | ❌ blocked. paramiko fails with `Error reading SSH protocol banner` against this router; root cause unknown. Use Winbox Files panel + terminal `/import` instead. |
-| `/ip/service` positional matching | Open. Differ falls back to `@anon=N` for unnamed singleton-set items, which mis-aligns when live and candidate emit them in different orders. `--lenient` papers over the symptom for now. |
-| RouterOS expression literals (`admin-mac=[/interface/ethernet get ...]`) | Open. Differ stores the expression as a literal string; live router evaluates it. Round-trips clean only because both sides agree on the literal. |
-| Authored configs vs `/export` ordering | The bundler doesn't reorder items to match export's alphabetized property output. Differ tolerates this via identity matching. |
-
-See per-tool READMEs for tool-level caveats.
+| Tool         | State                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------ |
+| `rsc-parser` | ✅ stable                                                                                              |
+| `rsc-bundle` | ✅ stable                                                                                              |
+| `rsc-diff`   | ✅ stable; roundtrip mode catches missing `defaults.py` entries automatically                          |
+| `rsc-deploy` | ❌ blocked: `Error reading SSH protocol banner` against test router. Use Winbox Files panel + `/import`. |
