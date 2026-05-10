@@ -126,6 +126,11 @@ def _consume_item(cfg: Config, menu: str, line: str) -> None:
         # `set telnet disabled=yes` -- first token is a positional id.
         first, _, rest = rest.partition(" ")
         props["__selector__"] = first
+        # The positional id IS the row identity for menus like /ip/service
+        # (built-in services keyed by name=ssh, name=telnet, ...). Surface
+        # it as `name=` so identity_key() can pick it up via MENUS_WITH_NAME.
+        # `setdefault` so an explicit `name=` later in the same line wins.
+        props.setdefault("name", first)
         rest = rest.lstrip()
 
     for key, value in _tokenise_kv(rest):

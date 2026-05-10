@@ -18,6 +18,7 @@ MENUS_WITH_NAME: frozenset[str] = frozenset(
         "/interface/wifi/configuration",
         "/ip/pool",
         "/ip/dhcp-server",
+        "/ip/service",
         "/system/script",
     }
 )

@@ -93,8 +93,14 @@ def apply_patch(base: Config, patch_path: Path) -> Config:
             if rest == "[find]":
                 items.clear()
             elif rest.startswith("["):
-                bracket, _ = _take_bracket(rest)
-                target = find_item(items, bracket)
+                bracket, after = _take_bracket(rest)
+                # `remove [find] numbers=N` -- positional remove, used when
+                # the emitter falls back to numbered addressing for menus
+                # without a stable identity property.
+                if bracket == "[find]" and after.strip().startswith("numbers="):
+                    target = _resolve_numbers(items, after.strip())
+                else:
+                    target = find_item(items, bracket)
                 if target is not None:
                     items.remove(target)
 
@@ -104,7 +110,11 @@ def apply_patch(base: Config, patch_path: Path) -> Config:
         elif verb == "set":
             if rest.startswith("["):
                 bracket, after = _take_bracket(rest)
-                target = find_item(items, bracket)
+                # `set [find] numbers=N prop=val ...` -- positional set.
+                if bracket == "[find]" and after.strip().startswith("numbers="):
+                    target, after = _resolve_numbers_with_rest(items, after.strip())
+                else:
+                    target = find_item(items, bracket)
                 props = parse_props(after.strip())
             else:
                 props = parse_props(rest)
@@ -119,7 +129,10 @@ def apply_patch(base: Config, patch_path: Path) -> Config:
         elif verb == "reset":
             if rest.startswith("["):
                 bracket, after = _take_bracket(rest)
-                target = find_item(items, bracket)
+                if bracket == "[find]" and after.strip().startswith("numbers="):
+                    target, after = _resolve_numbers_with_rest(items, after.strip())
+                else:
+                    target = find_item(items, bracket)
                 names = after.strip().split()
             else:
                 names = rest.strip().split()
@@ -129,6 +142,25 @@ def apply_patch(base: Config, patch_path: Path) -> Config:
                     target.props.pop(n, None)
 
     return cfg
+
+
+def _resolve_numbers(items, rest: str) -> Item | None:
+    """Resolve a leading ``numbers=N`` token in *rest* to an item, or None."""
+    target, _ = _resolve_numbers_with_rest(items, rest)
+    return target
+
+
+def _resolve_numbers_with_rest(items, rest: str) -> tuple[Item | None, str]:
+    """Pop a leading ``numbers=N`` token. Returns (item_or_None, remaining_rest)."""
+    head, _, tail = rest.partition(" ")
+    if not head.startswith("numbers="):
+        return None, rest
+    try:
+        idx = int(head.split("=", 1)[1])
+    except ValueError:
+        return None, tail
+    target = items[idx] if 0 <= idx < len(items) else None
+    return target, tail
 
 
 def menu_signature(items):

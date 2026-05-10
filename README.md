@@ -1,16 +1,13 @@
-# mikrotik
+# mikrotik-tools
 
 Personal RouterOS IaC for a **MikroTik C53UiG+5HPaxD2HPaxD** on RouterOS 7.20+.
-Modular `.rsc` source under `rsc/`, three Python tools under `tools/` to bundle / diff / deploy.
+Three Python tools under `tools/` to bundle / diff / deploy.
 
 ## Layout
 
 ```
-mikrotik/
-├── rsc/                     source of truth (one folder per "site")
-│   ├── <config-name>/       router configuration
-│   ├── ...
-├── tools/
+mikrotik-tools/
+├── src/
 │   ├── rsc-bundle/          inline /imports + flatten scripting -> single .rsc
 │   ├── rsc-diff/            file-vs-file differ + verifier
 │   └── rsc-deploy/          SSH/SFTP uploader (BLOCKED, see below)
@@ -19,24 +16,22 @@ mikrotik/
 └── build.ps1                sync all tools, refresh shims in bin/
 ```
 
-Each site under `rsc/<site>/` has `<site>.rsc` (entry), `vars.rsc` + `secrets.rsc` (gitignored), `helpers/`, `modules/NN-*.rsc` (numeric apply order).
-
 ## End-to-end flow
 
 ```powershell
 # 1. one-time: build tools, drop shims into bin/
 .\build.ps1
 
-# 2. bundle a site -> single self-contained .rsc in out/
-.\bin\rsc-bundle.cmd --mainScript rsc\<site>\<site>.rsc --out out
-# -> out\<site>-YYMMDD-XXXXX.rsc   (no /import lines, vars resolved, scripting stripped)
+# 2. bundle a modular config -> single self-contained .rsc in out/
+.\bin\rsc-bundle.cmd --mainScript <config>.rsc --out out
+# -> out\<config>-YYMMDD-XXXXX.rsc   (no /import lines, vars resolved, scripting stripped)
 
 # 3. capture live router state
 #    (in Winbox terminal): /export terse file=live
 #    drag /file/live.rsc off the router into out\live.rsc
 
 # 4. compute rollforward + rollback patches
-$candidate = (Get-ChildItem out\<site>-*.rsc | Sort Name | Select -Last 1).FullName
+$candidate = (Get-ChildItem out\<config>-*.rsc | Sort Name | Select -Last 1).FullName
 .\bin\rsc-diff.cmd out\live.rsc $candidate --lenient -o out\rollforward.rsc
 .\bin\rsc-diff.cmd $candidate out\live.rsc --lenient -o out\rollback.rsc
 
@@ -53,7 +48,7 @@ For a fresh device install, use the bundle directly:
 
 ```routeros
 /system/reset-configuration no-defaults=yes skip-backup=yes \
-    run-after-reset=<site>-260509-XXXXX.rsc
+    run-after-reset=<config>-260509-XXXXX.rsc
 ```
 
 ## Conventions
@@ -73,7 +68,7 @@ Every config item carries a stable identifier so configs can be diffed and patch
 
 | File | Commit? |
 |---|---|
-| `<site>.rsc` — orchestrator | yes |
+| `<config>.rsc` — orchestrator | yes |
 | `vars.rsc` — non-sensitive tunables | yes |
 | `secrets.rsc` — credentials | **no** (gitignored) |
 | `helpers/*.rsc` — reusable functions | yes |

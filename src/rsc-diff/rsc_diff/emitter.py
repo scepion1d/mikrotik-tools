@@ -90,13 +90,19 @@ def _find_clause(menu: str, identity_key: str) -> str:
       - "comment~iac.x.y"       -> [find comment~"iac.x.y"]
       - "default-name=ether1"   -> [find default-name=ether1]
       - "@pos=N"                -> numbered (N) -- positional set
+      - "@anon=N"               -> numbered (N) -- last-resort fallback for
+                                   menus without a stable identity property
       - menu path itself        -> "" (singleton, no selector)
     """
     if identity_key == menu:
         return ""  # singleton
 
-    if identity_key.startswith("@pos="):
-        # Positional addressing: `set numbers=N prop=...`
+    # @pos / @anon are both internal positional selectors. RouterOS doesn't
+    # know either token (`[find @anon=N]` raises "missing value for where"),
+    # so render them via the documented `numbers=N` form. They differ only
+    # in *why* the differ chose positional addressing -- semantically they
+    # mean the same thing at apply time.
+    if identity_key.startswith("@pos=") or identity_key.startswith("@anon="):
         n = identity_key.split("=", 1)[1]
         return f"[find] numbers={n}"
 

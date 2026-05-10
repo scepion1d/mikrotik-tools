@@ -29,7 +29,7 @@ def diff(old: Config, new: Config, *, strict: bool = False, lenient_defaults: bo
             MENU_DEFAULTS entry once verified. Ignored when strict=True.
     """
     ops: list[Op] = []
-    all_menus = sorted(set(old.menus()) | set(new.menus()))
+    all_menus = sorted(set(old.menus()) | set(new.menus()), key=_menu_sort_key)
 
     for menu in all_menus:
         ops.extend(
@@ -40,6 +40,45 @@ def diff(old: Config, new: Config, *, strict: bool = False, lenient_defaults: bo
         )
 
     return ops
+
+
+# Menus whose `set` ops reference NAMES of items created in OTHER menus.
+# Emitted last (after the menus that create those items), so the router
+# can validate the reference at apply time.
+#
+# Example: /disk/settings.auto-media-interface=iac.vlan.int requires that
+# iac.vlan.int already exist on /interface/vlan. Default alphabetic order
+# would emit /disk/settings before /interface/vlan -> "input does not match
+# any value of auto-media-interface".
+#
+# /interface/wifi is here because its rows carry `configuration=` /
+# `master-interface=` references to /interface/wifi/{configuration,...}
+# items, and `/interface/wifi` sorts BEFORE its sub-paths alphabetically
+# (shorter string wins) so without bumping it would activate before its
+# configurations exist.
+#
+# Within this group, alphabetic order is preserved (relative ordering only
+# matters when one late menu references another, which is rare).
+_MENU_LATE: frozenset[str] = frozenset({
+    "/disk/settings",
+    "/interface/wifi",
+    "/ip/neighbor/discovery-settings",
+    "/tool/mac-server",
+    "/tool/mac-server/mac-winbox",
+    "/tool/mac-server/ping",
+    "/system/routerboard/mode-button",
+    "/system/routerboard/wps-button",
+})
+
+
+def _menu_sort_key(menu: str) -> tuple[int, str]:
+    """Sort menus alphabetically, but push reference-heavy "settings" menus
+    to the end so their ops run after the menus that create the referenced
+    items.
+
+    Returns (bucket, menu) where bucket=0 is normal and bucket=1 is late.
+    """
+    return (1 if menu in _MENU_LATE else 0, menu)
 
 
 def _diff_menu(

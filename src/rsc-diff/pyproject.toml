@@ -36,3 +36,8 @@ include = ["rsc_diff*"]
 
 [tool.setuptools.package-data]
 rsc_diff = ["py.typed"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
