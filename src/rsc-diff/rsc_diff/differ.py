@@ -89,11 +89,15 @@ def _diff_menu(
     strict: bool,
     lenient_defaults: bool,
 ) -> list[Op]:
-    # Ordered menus (firewall chains) are notoriously fragile to diff in
-    # place: rules are positional, identity by comment is optional, and a
-    # single insert shifts every subsequent rule. We sidestep all of it by
-    # wipe-then-add: when ANY difference is detected, emit one `remove
-    # [find]` followed by an `add` per rule in declaration order.
+    """Dispatch a single menu's diff to the right strategy.
+
+    Ordered menus (firewall chains) are notoriously fragile to diff in
+    place: rules are positional, identity by comment is optional, and a
+    single insert shifts every subsequent rule. We sidestep all of it by
+    wipe-then-add: when ANY difference is detected, emit one
+    ``remove [find]`` followed by an ``add`` per rule in declaration
+    order. Everything else uses per-key matching.
+    """
     if menu in MENUS_ORDERED:
         return _diff_menu_replace(menu, old_idx, new_idx, strict=strict)
 
@@ -265,11 +269,16 @@ def _diff_menu_per_key(
 
 
 def _strip_identity(props: dict[str, str]) -> dict[str, str]:
+    """Drop identity-only keys (``__selector__``, ``default-name``).
+
+    Used by :mod:`rsc_diff.verify`'s :func:`menu_signature` to compute a
+    structural fingerprint that's stable under identity-only changes.
+    """
     return {k: v for k, v in props.items() if k not in IDENTITY_PROPS}
 
 
-def _remove_sort_key(key: str) -> tuple:
-    """Sort key for `remove` ops within a menu.
+def _remove_sort_key(key: str) -> tuple[int, int | str]:
+    """Sort key for ``remove`` ops within a menu.
 
     Positional selectors (@anon / @pos) sort first, in DESCENDING numeric
     order, so removing higher-indexed items first leaves lower indices
@@ -376,13 +385,3 @@ def _normalise_value(value: str | None) -> str | None:
     ):
         return value[1:-1]
     return value
-
-
-# Kept for backwards compatibility with anyone importing the old name.
-def _changed_props(
-    old_props: dict[str, str], new_props: dict[str, str]
-) -> dict[str, str]:
-    changed, _removed = _prop_changes(
-        "", old_props, new_props, strict=True
-    )
-    return changed

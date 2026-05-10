@@ -45,20 +45,19 @@ from __future__ import annotations
 #
 # Sources of truth for each entry are noted in the comment beside it.
 MENU_DEFAULTS: dict[str, dict[str, str]] = {
-    # /interface/bridge protocol-mode: confirmed by checking that an
-    # authored `protocol-mode=rstp` was OMITTED from the router's
-    # /export output -- which only happens when the value equals the
-    # default. See out/stable-7.54.backup.rsc /interface bridge section.
-    #
-    # /interface/bridge vlan-filtering: confirmed by the rsc-diff e2e
-    # roundtrip test (Phase 4 introduction). Going segmented->basic emits
-    # `set vlan-filtering=no` to drop the property; without this default
-    # the simulator's post-apply state has `vlan-filtering=no` while the
-    # target (basic) is silent on it, producing 1 residual op. Adding
-    # this entry resolves the drift -- consistent with /export omitting
-    # `vlan-filtering` whenever it equals `no`.
     "/interface/bridge": {
+        # protocol-mode: confirmed by checking that an authored
+        # `protocol-mode=rstp` was OMITTED from the router's /export
+        # output -- which only happens when the value equals the default.
+        # See out/stable-7.54.backup.rsc /interface bridge section.
         "protocol-mode": "rstp",
+        # vlan-filtering: confirmed by the rsc-diff e2e roundtrip test
+        # (Phase 4 introduction). Going segmented->basic emits
+        # `set vlan-filtering=no` to drop the property; without this
+        # default the simulator's post-apply state has `vlan-filtering=no`
+        # while the target (basic) is silent on it, producing 1 residual
+        # op. Adding this entry resolves the drift -- consistent with
+        # /export omitting `vlan-filtering` whenever it equals `no`.
         "vlan-filtering": "no",
     },
     # /ip/dhcp-server/lease lease-time: same evidence path.

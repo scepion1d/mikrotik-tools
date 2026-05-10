@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -180,23 +181,16 @@ def _run_single(
     text = emit(ops, header="\n".join(header_lines))
 
     out_path = _resolve_out_path(out, old_path, new_path)
-    if out_path is None:
-        # Caller asked for stdout (legacy: no -out and old positional usage
-        # without explicit dest). Detect by sentinel: _resolve_out_path
-        # never returns None today; this branch is unreachable but kept as
-        # a guard for future stdout opt-in.
-        sys.stdout.write(text)
-    else:
-        try:
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            print(
-                f"rsc-diff: cannot create output dir {out_path.parent}: {exc}",
-                file=sys.stderr,
-            )
-            return 2
-        out_path.write_text(text, encoding="utf-8")
-        print(out_path)
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(
+            f"rsc-diff: cannot create output dir {out_path.parent}: {exc}",
+            file=sys.stderr,
+        )
+        return 2
+    out_path.write_text(text, encoding="utf-8")
+    print(out_path)
     return 0
 
 
@@ -302,7 +296,6 @@ def _verify_leg(
         return True
     print(f"  DRIFT -- {len(drift)} residual op(s)")
     # Group by menu + kind for a compact failure report.
-    from collections import Counter
     by_menu: dict[str, Counter[str]] = {}
     for op in drift:
         by_menu.setdefault(op.menu, Counter())[op.kind] += 1

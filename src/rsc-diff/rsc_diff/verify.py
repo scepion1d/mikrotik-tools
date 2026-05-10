@@ -1,42 +1,48 @@
 """Apply an .rsc patch on top of a Config and check semantic equality.
 
-Used to validate that the rollforward/rollback patches emitted by ``rsc-diff``
-actually transform a *live* router state into a *candidate* config and back
-again.
+Used by the ``rsc-diff`` roundtrip mode (see :mod:`rsc_diff.cli`) to
+validate that the rollforward and rollback patches actually transform a
+*live* router state into a *candidate* config and back again.
 
 NOT a production interpreter -- the simulator only handles the ops that
-``rsc-diff`` currently emits, plus a few selector forms.
+``rsc-diff`` currently emits, plus a few selector forms used in router
+exports. Anything more exotic (script blocks, file ops, etc.) is
+ignored silently.
 
-CLI
----
-Without arguments the tool walks ``c:/src/mikrotik/out`` for ``live.rsc`` and
-the most recent bundle (any ``*-<yymmdd>-<secs>.rsc``) plus the canonical
-``rollforward.rsc`` / ``rollback.rsc`` patch pair. Override any of those by
-passing flags::
+Public API
+----------
+- :func:`apply_patch` -- replay an .rsc patch on a base :class:`Config`.
+- :func:`residual_ops` -- re-run the differ to score what's left.
 
-    rsc-diff-verify
-    rsc-diff-verify --out other-out-dir
-    rsc-diff-verify --live a.rsc --candidate b.rsc \\
-                    --rollforward fwd.rsc --rollback bwd.rsc
+The rest of the module exposes its lex helpers (``find_item``,
+``parse_props``, ``deep_copy``) so tests can drive the simulator directly.
 """
 
 from __future__ import annotations
 
-import argparse
 import re
-import sys
 from collections import Counter
 from pathlib import Path
 
-from rsc_diff import Config, Item, Op, diff, emit, parse_file
+from rsc_diff import Config, Item, Op, diff, parse_file  # noqa: F401  (parse_file re-exported for convenience)
 from rsc_diff.differ import _strip_identity
 from rsc_diff.parser import _logical_lines, _take_bracket, _tokenise_kv
 
 
+# Matches both equality (`[find name=foo]`) and contains (`[find comment~bar]`)
+# selectors. The `key` group also captures positional `@anon` / `@pos`.
 _FIND_RE = re.compile(r'\[find\s+(?P<key>[\w@-]+)(?P<op>[=~])(?P<val>.+)\]')
 
 
 def find_item(items, selector: str | None) -> Item | None:
+    """Resolve a ``[find ...]`` selector to a single :class:`Item` in *items*.
+
+    Returns ``None`` for the wipe sentinel ``[find]``, malformed
+    selectors, or no match. Positional selectors (``@anon=N`` /
+    ``@pos=N``) are resolved by index into *items*; everything else is a
+    linear scan comparing the property in *items* against the selector
+    value (``=`` for exact match, ``~`` for substring).
+    """
     if selector is None:
         return None
     sel = selector.strip()
@@ -61,10 +67,12 @@ def find_item(items, selector: str | None) -> Item | None:
 
 
 def parse_props(rest: str) -> dict[str, str]:
+    """Tokenise the right-hand side of a ``add``/``set`` line into ``{key: value}``."""
     return {k: v for k, v in _tokenise_kv(rest)}
 
 
 def deep_copy(cfg: Config) -> Config:
+    """Return a deep copy of *cfg* with independently mutable item dicts."""
     out = Config()
     for items in cfg.items_by_menu.values():
         for it in items:
@@ -73,6 +81,14 @@ def deep_copy(cfg: Config) -> Config:
 
 
 def apply_patch(base: Config, patch_path: Path) -> Config:
+    """Replay the ops in *patch_path* on top of *base* and return the result.
+
+    Reads each non-comment, non-blank line of the patch file and dispatches
+    on the verb (``remove`` / ``add`` / ``set`` / ``reset``). The simulator
+    walks each menu's item list and mutates the deep copy of *base* in
+    place. Used by the roundtrip mode in :mod:`rsc_diff.cli` to score
+    whether the patch transforms one config into another semantically.
+    """
     cfg = deep_copy(base)
     cur_menu: str | None = None
     text = patch_path.read_text(encoding="utf-8")
@@ -164,6 +180,7 @@ def _resolve_numbers_with_rest(items, rest: str) -> tuple[Item | None, str]:
 
 
 def menu_signature(items):
+    """Multiset of identity-stripped prop dicts; used by :func:`cfg_diff_summary`."""
     return Counter(
         tuple(sorted(_strip_identity(it.props).items())) for it in items
     )
@@ -197,133 +214,3 @@ def residual_ops(result: Config, target: Config, *, strict: bool = False, lenien
     to verify a round-trip.
     """
     return diff(result, target, strict=strict, lenient_defaults=lenient_defaults)
-
-
-def _autodetect_candidate(out_dir: Path) -> Path:
-    # any bundled .rsc named "<stem>-<yymmdd>-<secs>.rsc"; exclude live.rsc
-    # and well-known patch outputs.
-    skip = {"live.rsc", "rollforward.rsc", "rollback.rsc"}
-    matches = sorted(
-        p for p in out_dir.glob("*.rsc")
-        if p.name not in skip and re.search(r"-\d{6}-\d+\.rsc$", p.name)
-    )
-    if not matches:
-        raise SystemExit(f"no candidate bundle in {out_dir} (looked for *-yymmdd-secs.rsc)")
-    # most recent by name (bundler suffix is sortable)
-    return matches[-1]
-
-
-def _build_arg_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
-        prog="rsc-diff-verify",
-        description="Verify rollforward/rollback patches round-trip live <-> candidate.",
-    )
-    p.add_argument(
-        "--out",
-        type=Path,
-        default=Path(r"c:\src\mikrotik\out"),
-        help=r"output dir to scan (default: c:\src\mikrotik\out)",
-    )
-    p.add_argument("--live", type=Path, help="path to live router export (default: <out>/live.rsc)")
-    p.add_argument("--candidate", type=Path, help="path to candidate bundle (default: latest *-yymmdd-secs.rsc in --out)")
-    p.add_argument("--rollforward", type=Path, help="path to rollforward patch (default: <out>/rollforward.rsc)")
-    p.add_argument("--rollback", type=Path, help="path to rollback patch (default: <out>/rollback.rsc)")
-    p.add_argument(
-        "--strict",
-        action="store_true",
-        help="pass strict=True to the differ when scoring residual ops (no per-menu "
-             "defaults / computed-property normalization). Useful to surface every "
-             "textual delta, not just the semantically-meaningful ones.",
-    )
-    p.add_argument(
-        "--lenient",
-        action="store_true",
-        help="pass lenient_defaults=True to the differ. Suppresses asymmetric "
-             "drift where one side has explicit neutral value (no/false/none/0/0s/'') "
-             "and the other side is silent. RISK: hides real drift if the actual "
-             "default is non-neutral.",
-    )
-    p.add_argument(
-        "--show-ops",
-        action="store_true",
-        help="print the full residual patch text for each leg, not just a per-menu summary.",
-    )
-    return p
-
-
-def _summarize_ops(ops: list[Op]) -> list[str]:
-    """Group residual ops by menu + kind for a compact failure report."""
-    by_menu: dict[str, Counter[str]] = {}
-    for op in ops:
-        by_menu.setdefault(op.menu, Counter())[op.kind] += 1
-    out = []
-    for menu in sorted(by_menu):
-        counts = by_menu[menu]
-        parts = ", ".join(f"{kind}={n}" for kind, n in sorted(counts.items()))
-        out.append(f"{menu}: {parts}")
-    return out
-
-
-def _report_leg(
-    label: str, result: Config, target: Config, *, strict: bool, lenient_defaults: bool, show_ops: bool
-) -> bool:
-    """Run one verification leg. Returns True on pass."""
-    print(f"--- {label} ---")
-    ops = residual_ops(result, target, strict=strict, lenient_defaults=lenient_defaults)
-    if not ops:
-        print("  OK -- differ reports no residual drift")
-        return True
-    print(f"  DRIFT -- {len(ops)} residual op(s):")
-    for line in _summarize_ops(ops):
-        print(f"    {line}")
-    if show_ops:
-        print()
-        for line in emit(ops).splitlines():
-            print(f"    {line}")
-    return False
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = _build_arg_parser().parse_args(argv)
-    out = args.out
-
-    live_path = args.live or (out / "live.rsc")
-    cand_path = args.candidate or _autodetect_candidate(out)
-    fwd_path = args.rollforward or (out / "rollforward.rsc")
-    bwd_path = args.rollback or (out / "rollback.rsc")
-
-    for p in (live_path, cand_path, fwd_path, bwd_path):
-        if not p.is_file():
-            raise SystemExit(f"missing input: {p}")
-
-    live = parse_file(live_path)
-    cand = parse_file(cand_path)
-
-    print(f"live        = {live_path}")
-    print(f"candidate   = {cand_path}")
-    print(f"rollforward = {fwd_path}")
-    print(f"rollback    = {bwd_path}")
-    print(f"strict      = {args.strict}")
-    print(f"lenient     = {args.lenient}")
-    print()
-
-    passes = 0
-    if _report_leg(
-        "live + rollforward.rsc should equal candidate",
-        apply_patch(live, fwd_path), cand,
-        strict=args.strict, lenient_defaults=args.lenient, show_ops=args.show_ops,
-    ):
-        passes += 1
-    print()
-    if _report_leg(
-        "candidate + rollback.rsc should equal live",
-        apply_patch(cand, bwd_path), live,
-        strict=args.strict, lenient_defaults=args.lenient, show_ops=args.show_ops,
-    ):
-        passes += 1
-
-    return 0 if passes == 2 else 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())

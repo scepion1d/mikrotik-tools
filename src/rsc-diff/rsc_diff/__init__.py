@@ -1,11 +1,13 @@
 """rsc-diff -- RouterOS ``.rsc`` configuration differ.
 
-A lightweight, dependency-free library for comparing two RouterOS scripts
-and emitting a minimal set of ``add`` / ``set`` / ``remove`` operations
-needed to transform one into the other.
+A lightweight library + CLI for comparing two RouterOS scripts and
+emitting a minimal set of ``add`` / ``set`` / ``reset`` / ``remove``
+operations needed to transform one into the other. The roundtrip mode
+also verifies that applying the patch and rolling back lands you exactly
+where you started.
 
-Designed around an ``iac.<type>.<id>`` naming convention for stable item
-identity across edits.
+Designed around the ``iac.<type>.<id>`` naming convention from
+:mod:`rsc_parser` for stable item identity across edits.
 
 Quick start
 -----------
@@ -20,10 +22,14 @@ Quick start
 
 CLI
 ---
-The package also installs an ``rsc-diff`` console script::
+The package installs an ``rsc-diff`` console script::
 
-    rsc-diff old.rsc new.rsc -o patch.rsc
-    rsc-diff old.rsc new.rsc --check    # exit 1 on drift, for CI
+    rsc-diff --old baseline.rsc --new desired.rsc -o patch.rsc
+    rsc-diff --old baseline.rsc --new desired.rsc --check    # exit 1 on drift
+    rsc-diff --old live.rsc --new candidate.rsc \\
+             --rollforward fwd.rsc --rollback bwd.rsc       # roundtrip mode
+
+See :mod:`rsc_diff.cli` for full flag docs.
 
 Public API
 ----------
@@ -31,9 +37,10 @@ Public API
 - :func:`parse_text` -- parse a ``.rsc`` string in memory
 - :func:`diff` -- compute operations between two :class:`Config` objects
 - :func:`emit` -- render a list of :class:`Op` as a runnable patch
-- :class:`Config` -- parsed config (``{menu_path: [Item]}``)
-- :class:`Item` -- one parsed config item with identity resolution
-- :class:`Op` -- one diff operation (``add`` / ``set`` / ``remove``)
+- :class:`Config` / :class:`Item` / :class:`Op` -- data model (re-exported
+  from :mod:`rsc_parser`)
+- :mod:`rsc_diff.verify` -- in-memory patch simulator
+  (:func:`~rsc_diff.verify.apply_patch`, :func:`~rsc_diff.verify.residual_ops`)
 """
 
 from .differ import diff
