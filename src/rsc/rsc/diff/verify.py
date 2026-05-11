@@ -33,6 +33,21 @@ from rsc.parser.parser import _logical_lines, _take_bracket, _tokenise_kv
 # selectors. The `key` group also captures positional `@anon` / `@pos`.
 _FIND_RE = re.compile(r'\[find\s+(?P<key>[\w@-]+)(?P<op>[=~])(?P<val>.+)\]')
 
+# Selectors that mean "every non-builtin row in this menu". The `[find]` form
+# is the differ's wipe sentinel for ordered menus; the `!dynamic` /
+# `dynamic=no` forms are the safer variants emitted for menus that may
+# contain system-protected built-in rules (e.g. firewall chains).
+_WIPE_SENTINELS: frozenset[str] = frozenset({
+    "[find]", "[find !dynamic]", "[find dynamic=no]",
+})
+
+# Positional selector keys produced by :class:`Item.identity_key`. They
+# refer to row indices, not properties, and are handled separately.
+_POSITIONAL_KEYS: frozenset[str] = frozenset({"@anon", "@pos"})
+
+
+# --- public lex helpers (also imported by tests) ----------------------------
+
 
 def find_item(items, selector: str | None) -> Item | None:
     """Resolve a ``[find ...]`` selector to a single :class:`Item` in *items*.
@@ -44,57 +59,28 @@ def find_item(items, selector: str | None) -> Item | None:
     comparing the property in *items* against the selector value (``=``
     for exact match, ``~`` for substring).
     """
-    if selector is None:
+    parsed = _parse_find_selector(selector)
+    if parsed is None:
         return None
-    sel = selector.strip()
-    if sel in ("[find]", "[find !dynamic]", "[find dynamic=no]"):
-        return None  # wipe sentinel
-    m = _FIND_RE.match(sel)
-    if not m:
-        return None
-    key, op, val = m.group("key"), m.group("op"), m.group("val").strip()
-    if val.startswith('"') and val.endswith('"'):
-        val = val[1:-1]
-    if key in ("@anon", "@pos"):
+    key, op, val = parsed
+
+    if key in _POSITIONAL_KEYS:
+        # `[find @anon=N]` / `[find @pos=N]` -- the value is just N.
         idx = int(val.lstrip("="))
         return items[idx] if 0 <= idx < len(items) else None
+
     for it in items:
-        v = it.props.get(key, "")
-        if v.startswith('"') and v.endswith('"'):
-            v = v[1:-1]
-        if (op == "=" and v == val) or (op == "~" and val in v):
+        prop_val = _unquote(it.props.get(key, ""))
+        if op == "=" and prop_val == val:
+            return it
+        if op == "~" and val in prop_val:
             return it
     return None
 
 
 def parse_props(rest: str) -> dict[str, str]:
     """Tokenise the right-hand side of a ``add``/``set`` line into ``{key: value}``."""
-    return {k: v for k, v in _tokenise_kv(rest)}
-
-
-def _selector_kv(selector: str) -> dict[str, str] | None:
-    """Return ``{key: value}`` for a ``[find KEY=VAL]`` (equality) selector.
-
-    Returns ``None`` for wipe sentinels, contains-form selectors
-    (``[find comment~tag]``), positional forms (``@anon`` / ``@pos``),
-    and anything malformed -- those don't identify a single boot-default
-    row, so the verifier shouldn't synthesise one.
-
-    Used by :func:`apply_patch` to materialise built-in rows that
-    /export omitted from the parsed base (e.g. ``/user admin``).
-    """
-    sel = selector.strip()
-    if sel in ("[find]", "[find !dynamic]", "[find dynamic=no]"):
-        return None
-    m = _FIND_RE.match(sel)
-    if not m:
-        return None
-    key, op, val = m.group("key"), m.group("op"), m.group("val").strip()
-    if op != "=" or key in ("@anon", "@pos"):
-        return None
-    if val.startswith('"') and val.endswith('"'):
-        val = val[1:-1]
-    return {key: val}
+    return dict(_tokenise_kv(rest))
 
 
 def deep_copy(cfg: Config) -> Config:
@@ -104,6 +90,9 @@ def deep_copy(cfg: Config) -> Config:
         for it in items:
             out.add(Item(menu=it.menu, verb=it.verb, props=dict(it.props)))
     return out
+
+
+# --- patch application -----------------------------------------------------
 
 
 def apply_patch(base: Config, patch_path: Path) -> Config:
@@ -117,8 +106,8 @@ def apply_patch(base: Config, patch_path: Path) -> Config:
     """
     cfg = deep_copy(base)
     cur_menu: str | None = None
-    text = patch_path.read_text(encoding="utf-8")
-    for raw in _logical_lines(text):
+
+    for raw in _logical_lines(patch_path.read_text(encoding="utf-8")):
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
@@ -127,93 +116,138 @@ def apply_patch(base: Config, patch_path: Path) -> Config:
             continue
         if cur_menu is None:
             continue
+
         verb, _, rest = line.partition(" ")
         rest = rest.strip()
         items = cfg.items_by_menu.setdefault(cur_menu, [])
 
+        # Dispatch by verb. Each handler mutates *items* / *cfg* in place;
+        # unknown verbs are silently dropped (we only model what the
+        # differ emits).
         if verb == "remove":
-            # Wipe sentinels: bare `[find]` and the safer `[find !dynamic]` /
-            # `[find dynamic=no]` forms emitted for menus that may contain
-            # system-protected built-in rules (e.g. firewall chains).
-            if rest in ("[find]", "[find !dynamic]", "[find dynamic=no]"):
-                items.clear()
-            elif rest.startswith("["):
-                bracket, after = _take_bracket(rest)
-                # `remove [find] numbers=N` -- positional remove, used when
-                # the emitter falls back to numbered addressing for menus
-                # without a stable identity property.
-                if bracket == "[find]" and after.strip().startswith("numbers="):
-                    target = _resolve_numbers(items, after.strip())
-                else:
-                    target = find_item(items, bracket)
-                if target is not None:
-                    items.remove(target)
-
+            _apply_remove(items, rest)
         elif verb == "add":
             cfg.add(Item(menu=cur_menu, verb="add", props=parse_props(rest)))
-
         elif verb == "set":
-            if rest.startswith("["):
-                bracket, after = _take_bracket(rest)
-                # `set [find] numbers=N prop=val ...` -- positional set.
-                if bracket == "[find]" and after.strip().startswith("numbers="):
-                    target, after = _resolve_numbers_with_rest(items, after.strip())
-                else:
-                    target = find_item(items, bracket)
-                props = parse_props(after.strip())
-                # Built-in row that /export omits (e.g. /user admin,
-                # /interface/ethernet etherN, /ip/service telnet): the
-                # row exists on the live router but isn't in the parsed
-                # base Config because /export skipped it. RouterOS's
-                # `set [find KEY=VAL]` finds and updates the boot-default
-                # row; mirror that here by synthesising the row with the
-                # selector's KEY=VAL surfaced as an identity prop. Without
-                # this, the rollforward set silently drops, residual_ops
-                # re-emits the same set, and the verifier reports phantom
-                # drift on every deploy.
-                if target is None:
-                    selector_props = _selector_kv(bracket)
-                    if selector_props is not None:
-                        target = Item(
-                            menu=cur_menu, verb="set",
-                            props=dict(selector_props),
-                        )
-                        cfg.add(target)
-            else:
-                props = parse_props(rest)
-                if items:
-                    target = items[0]
-                else:
-                    target = Item(menu=cur_menu, verb="set", props={})
-                    cfg.add(target)
-            if target is not None:
-                target.props.update(props)
-
+            _apply_set(cfg, cur_menu, items, rest)
         elif verb == "reset":
-            if rest.startswith("["):
-                bracket, after = _take_bracket(rest)
-                if bracket == "[find]" and after.strip().startswith("numbers="):
-                    target, after = _resolve_numbers_with_rest(items, after.strip())
-                else:
-                    target = find_item(items, bracket)
-                names = after.strip().split()
-            else:
-                names = rest.strip().split()
-                target = items[0] if items else None
-            if target is not None:
-                for n in names:
-                    target.props.pop(n, None)
+            _apply_reset(items, rest)
 
     return cfg
 
 
-def _resolve_numbers(items, rest: str) -> Item | None:
+# --- per-verb handlers -----------------------------------------------------
+
+
+def _apply_remove(items: list[Item], rest: str) -> None:
+    """``remove [find ...]`` -- drop matching item(s) from *items*.
+
+    Wipe sentinels clear the whole list (used by the differ's
+    wipe-then-add strategy on ordered menus). Otherwise we resolve the
+    selector to a single row and remove it; missing rows are silently
+    ignored.
+    """
+    if rest in _WIPE_SENTINELS:
+        items.clear()
+        return
+    if not rest.startswith("["):
+        return  # malformed -- nothing to do
+
+    bracket, after = _take_bracket(rest)
+    target, _ = _resolve_target_with_rest(items, bracket, after)
+    if target is not None:
+        items.remove(target)
+
+
+def _apply_set(
+    cfg: Config, menu: str, items: list[Item], rest: str
+) -> None:
+    """``set [find ...] prop=val ...`` or singleton ``set prop=val ...``.
+
+    On a `[find KEY=VAL]` selector that matches no row, materialise a
+    new row carrying ``KEY=VAL`` -- this models the boot-default rows
+    that RouterOS /export omits (``/user admin``, default-named
+    ``etherN``, ``/ip/service telnet``, ...). Without this, the
+    rollforward set would silently drop and the verifier would report
+    phantom drift on every deploy.
+    """
+    if rest.startswith("["):
+        bracket, after = _take_bracket(rest)
+        target, after = _resolve_target_with_rest(items, bracket, after)
+        props = parse_props(after.strip())
+
+        if target is None:
+            # Synthesise the boot-default row when the selector is an
+            # equality `[find KEY=VAL]` and no row exists yet.
+            seed = _selector_kv(bracket)
+            if seed is not None:
+                target = Item(menu=menu, verb="set", props=dict(seed))
+                cfg.add(target)
+    else:
+        # Singleton menu: bare `set prop=val ...` against the menu's
+        # one implicit row. Create the row if the menu was empty.
+        props = parse_props(rest)
+        if items:
+            target = items[0]
+        else:
+            target = Item(menu=menu, verb="set", props={})
+            cfg.add(target)
+
+    if target is not None:
+        target.props.update(props)
+
+
+def _apply_reset(items: list[Item], rest: str) -> None:
+    """``reset [find ...] prop1 prop2 ...`` or singleton ``reset prop ...``.
+
+    Removes the named props from the matched item; missing props are
+    silently ignored (matches RouterOS behaviour).
+    """
+    if rest.startswith("["):
+        bracket, after = _take_bracket(rest)
+        target, after = _resolve_target_with_rest(items, bracket, after)
+        names = after.strip().split()
+    else:
+        names = rest.strip().split()
+        target = items[0] if items else None
+
+    if target is None:
+        return
+    for name in names:
+        target.props.pop(name, None)
+
+
+# --- selector / numbers= resolution ----------------------------------------
+
+
+def _resolve_target_with_rest(
+    items: list[Item], bracket: str, after: str
+) -> tuple[Item | None, str]:
+    """Resolve a selector + remainder into ``(item_or_None, remainder)``.
+
+    Two paths:
+      - ``[find] numbers=N``  -- positional, N indexes into *items*.
+                                 Strips the ``numbers=N`` token from
+                                 the returned remainder.
+      - ``[find KEY=VAL]``    -- linear scan via :func:`find_item`.
+                                 Remainder is returned unchanged
+                                 (already past the bracket).
+    """
+    after = after.strip()
+    if bracket == "[find]" and after.startswith("numbers="):
+        return _resolve_numbers_with_rest(items, after)
+    return find_item(items, bracket), after
+
+
+def _resolve_numbers(items: list[Item], rest: str) -> Item | None:
     """Resolve a leading ``numbers=N`` token in *rest* to an item, or None."""
     target, _ = _resolve_numbers_with_rest(items, rest)
     return target
 
 
-def _resolve_numbers_with_rest(items, rest: str) -> tuple[Item | None, str]:
+def _resolve_numbers_with_rest(
+    items: list[Item], rest: str
+) -> tuple[Item | None, str]:
     """Pop a leading ``numbers=N`` token. Returns (item_or_None, remaining_rest)."""
     head, _, tail = rest.partition(" ")
     if not head.startswith("numbers="):
@@ -224,6 +258,59 @@ def _resolve_numbers_with_rest(items, rest: str) -> tuple[Item | None, str]:
         return None, tail
     target = items[idx] if 0 <= idx < len(items) else None
     return target, tail
+
+
+# --- selector parsing ------------------------------------------------------
+
+
+def _parse_find_selector(
+    selector: str | None,
+) -> tuple[str, str, str] | None:
+    """Parse ``[find KEY OP VAL]`` into ``(key, op, val)``.
+
+    Returns ``None`` for ``None``, wipe sentinels, malformed input, or
+    selectors without a key/op/value triple. *op* is ``=`` (equality)
+    or ``~`` (contains). *val* is unquoted.
+    """
+    if selector is None:
+        return None
+    sel = selector.strip()
+    if sel in _WIPE_SENTINELS:
+        return None
+    m = _FIND_RE.match(sel)
+    if not m:
+        return None
+    return m.group("key"), m.group("op"), _unquote(m.group("val").strip())
+
+
+def _selector_kv(selector: str) -> dict[str, str] | None:
+    """Return ``{key: value}`` for a ``[find KEY=VAL]`` (equality) selector.
+
+    Returns ``None`` for wipe sentinels, contains-form selectors
+    (``[find comment~tag]``), positional forms (``@anon`` / ``@pos``),
+    and anything malformed -- those don't identify a single boot-default
+    row, so the verifier shouldn't synthesise one.
+
+    Used by :func:`_apply_set` to materialise built-in rows that
+    /export omitted from the parsed base (e.g. ``/user admin``).
+    """
+    parsed = _parse_find_selector(selector)
+    if parsed is None:
+        return None
+    key, op, val = parsed
+    if op != "=" or key in _POSITIONAL_KEYS:
+        return None
+    return {key: val}
+
+
+def _unquote(value: str) -> str:
+    """Strip surrounding ``"..."`` if present; leave bare values alone."""
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+        return value[1:-1]
+    return value
+
+
+# --- summary / residual scoring --------------------------------------------
 
 
 def menu_signature(items):
@@ -252,7 +339,10 @@ def cfg_diff_summary(a: Config, b: Config) -> list[str]:
     return diffs
 
 
-def residual_ops(result: Config, target: Config, *, strict: bool = False, lenient_defaults: bool = False) -> list[Op]:
+def residual_ops(
+    result: Config, target: Config, *,
+    strict: bool = False, lenient_defaults: bool = False,
+) -> list[Op]:
     """What additional ops would the differ emit to get from *result* to *target*?
 
     Empty list = patch round-tripped semantically. Re-using the differ here is

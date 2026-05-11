@@ -28,11 +28,8 @@ SCRIPT_DIRECTIVE_RE = re.compile(r"^\s*(:|/import\b|/file\b)")
 
 
 # Matches `[find KEY=VALUE]` -- the simple equality form of a `set`
-# selector. Used by _consume_item to surface KEY=VALUE into props so the
-# identity-key resolution can find it. RouterOS /export sometimes emits
-# `[ find KEY=VAL ]` (with padding spaces) while the bundler writes
-# `[find KEY=VAL]` (no padding); both must surface the same KEY=VAL or
-# the differ sees phantom drift between live and candidate.
+# selector. Tolerates the `[ find KEY=VAL ]` (padded) form /export emits
+# in addition to the `[find KEY=VAL]` (bare) form the bundler writes.
 _FIND_KV_RE = re.compile(r'^\[\s*find\s+(?P<key>[\w-]+)=(?P<val>[^\]]+?)\s*\]$')
 
 

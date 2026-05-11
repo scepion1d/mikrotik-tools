@@ -6,13 +6,6 @@ doesn't). RouterOS executes each line of the script in order; failures
 are typically reported on **stdout** as ``failure: ...`` rather than via
 a non-zero exit status.
 
-Why a separate module
----------------------
-``backup`` writes to flash, ``upload``/``download`` move bytes; this is
-the third leg -- *applying* a previously-uploaded script. Keeping it
-distinct from ``deployer`` keeps each entry point single-purpose and
-test-isolated (no mock SFTP needed here).
-
 Public API
 ----------
 - :func:`run_import` -- execute ``/import file-name=<remote>`` and
@@ -32,13 +25,8 @@ from .ssh import SshSession
 log = logging.getLogger("mtctl")
 
 
-class ImportError(Exception):  # noqa: A001 -- intentional override
-    """Raised when /import fails on the router.
-
-    Shadows the builtin ``ImportError`` deliberately: this is the
-    public exception of the :mod:`mtctl.importer` module and callers
-    should catch it via ``from mtctl.importer import ImportError``.
-    """
+class ImportError(Exception):  # noqa: A001 -- shadows builtin intentionally
+    """Raised when /import fails on the router."""
 
 
 def run_import(

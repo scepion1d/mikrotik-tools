@@ -33,14 +33,10 @@ from rsc.parser import Config, Item
 
 
 # Characters that force RouterOS to keep a value quoted in /export output.
-# Same regex as flatten._NEEDS_QUOTE_RE, repeated here so compact.py is
-# self-contained.
 _NEEDS_QUOTE_RE = re.compile(r'[\s\[\]{}();\\"`#$<>|&?*]')
 
-# Matches `[find KEY=VAL]` inside a __selector__ value. Tolerates the
-# padding-space variants /export emits (`[ find KEY=VAL ]`). Mirrors
-# rsc.parser.parser._FIND_KV_RE; kept local so compact.py is
-# self-contained for its narrow use (suppressing the surfaced prop).
+# Matches `[find KEY=VAL]` inside a __selector__ value, tolerating the
+# padding-space variants /export emits (`[ find KEY=VAL ]`).
 _SELECTOR_KV_RE = re.compile(r'^\[\s*find\s+(?P<key>[\w-]+)=(?P<val>[^\]]+?)\s*\]$')
 
 
@@ -69,34 +65,38 @@ def _render_item(item: Item) -> str:
     # `set` rows carry a __selector__ prop produced by the parser; emit
     # it next so the output matches authored RouterOS syntax.
     selector = item.props.get("__selector__")
-    skip_key: str | None = None
-    skip_val: str | None = None
+    redundant = None
     if selector:
         parts.append(selector)
         # If the selector is `[find KEY=VAL]`, the parser surfaces KEY=VAL
-        # into props so identity_key() can use it. We must NOT re-emit
-        # that prop here -- it would render as
-        # `set [find default=yes] default=yes ...`, which the next
-        # parse-cycle re-surfaces and the differ then sees as an extra
-        # prop on the candidate side (phantom drift vs live /export).
-        m = _SELECTOR_KV_RE.match(selector)
-        if m:
-            skip_key = m.group("key")
-            skip_val = m.group("val").strip()
-            if skip_val.startswith('"') and skip_val.endswith('"'):
-                skip_val = skip_val[1:-1]
+        # into props so identity_key() can use it. Don't re-emit that
+        # prop here -- it would render as `set [find KEY=VAL] KEY=VAL ...`,
+        # which the next parse-cycle re-surfaces and the differ then
+        # treats as an extra prop on the candidate side (phantom drift
+        # vs live /export).
+        redundant = _selector_redundant_kv(selector)
 
     for key, raw_value in item.props.items():
         if key == "__selector__":
             continue
-        if (
-            key == skip_key
-            and _strip_quotes(raw_value) == skip_val
-        ):
+        if redundant is not None and (key, _strip_quotes(raw_value)) == redundant:
             continue
         parts.append(f"{key}={_requote(_strip_quotes(raw_value))}")
 
     return " ".join(parts)
+
+
+def _selector_redundant_kv(selector: str) -> tuple[str, str] | None:
+    """Return the ``(key, value)`` already conveyed by *selector*, or None.
+
+    Matches ``[find KEY=VAL]`` (with or without the padding-space variant
+    /export emits). Anything else (`[find]`, contains-form `~`, positional
+    forms) returns None: those don't surface a redundant KV into props.
+    """
+    m = _SELECTOR_KV_RE.match(selector)
+    if m is None:
+        return None
+    return m.group("key"), _strip_quotes(m.group("val").strip())
 
 
 def _strip_quotes(value: str) -> str:
