@@ -18,7 +18,7 @@ source =
     src/rsc-parser/rsc_parser
     src/rsc-bundle/rsc_bundle
     src/rsc-diff/rsc_diff
-    src/rsc-deploy/rsc_deploy
+    src/rsc-ctl/rsc_ctl
 
 [report]
 show_missing = true

@@ -1,6 +1,6 @@
-"""Tests for ``rsc_deploy.deployer.upload`` and ``download``.
+"""Tests for ``rsc_ctl.deployer.upload`` and ``download``.
 
-We replace :class:`rsc_deploy.ssh.SshSession` with a fake that yields an
+We replace :class:`rsc_ctl.ssh.SshSession` with a fake that yields an
 in-memory :class:`FakeSftp` (also used by ``test_sftp.py``-like fakes
 here, kept local to avoid cross-test imports). Network is never touched.
 """
@@ -15,9 +15,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest  # noqa: E402
 
-from rsc_deploy import deployer as deployer_mod  # noqa: E402
-from rsc_deploy.config import Settings  # noqa: E402
-from rsc_deploy.deployer import DeployError, download, upload  # noqa: E402
+from rsc_ctl import deployer as deployer_mod  # noqa: E402
+from rsc_ctl.config import Settings  # noqa: E402
+from rsc_ctl.deployer import DeployError, download, upload  # noqa: E402
 
 
 # --- in-memory fakes --------------------------------------------------------

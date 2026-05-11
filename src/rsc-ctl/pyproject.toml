@@ -1,12 +1,12 @@
 [project]
-name = "rsc-deploy"
+name = "rsc-ctl"
 version = "0.1.0"
-description = "Upload RouterOS .rsc files over SSH/SFTP"
+description = "SSH/SFTP control plane for RouterOS: upload, download, backup"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "rsc-deploy contributors" }]
-keywords = ["routeros", "mikrotik", "iac", "deploy", "ssh", "sftp"]
+authors = [{ name = "rsc-ctl contributors" }]
+keywords = ["routeros", "mikrotik", "iac", "deploy", "backup", "ssh", "sftp"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: System Administrators",
@@ -35,11 +35,11 @@ dev = [
 # Per-tool measurement scope. The actual data file path is set per-run
 # via the COVERAGE_FILE env var in tools/test.ps1 (so each tool writes
 # a unique file under tools/.coverage-data/, ready for `coverage combine`).
-source = ["rsc_deploy"]
+source = ["rsc_ctl"]
 branch = true
 
 [project.scripts]
-rsc-deploy = "rsc_deploy.cli:main"
+rsc-ctl = "rsc_ctl.cli:main"
 
 [build-system]
 requires = ["setuptools>=61"]
@@ -47,7 +47,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["rsc_deploy*"]
+include = ["rsc_ctl*"]
 
 [tool.setuptools.package-data]
-rsc_deploy = ["py.typed"]
+rsc_ctl = ["py.typed"]

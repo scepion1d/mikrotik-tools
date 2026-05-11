@@ -1,4 +1,4 @@
-"""Tests for ``rsc_deploy.ssh.SshSession``.
+"""Tests for ``rsc_ctl.ssh.SshSession``.
 
 We patch ``paramiko.SSHClient`` with a small fake; no network I/O.
 """
@@ -14,10 +14,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import paramiko  # noqa: E402
 import pytest  # noqa: E402
 
-from rsc_deploy import ssh as ssh_mod  # noqa: E402
-from rsc_deploy.config import Settings  # noqa: E402
-from rsc_deploy.sftp import SftpClient  # noqa: E402
-from rsc_deploy.ssh import SshError, SshSession  # noqa: E402
+from rsc_ctl import ssh as ssh_mod  # noqa: E402
+from rsc_ctl.config import Settings  # noqa: E402
+from rsc_ctl.sftp import SftpClient  # noqa: E402
+from rsc_ctl.ssh import SshError, SshSession  # noqa: E402
 
 
 # --- fake paramiko.SSHClient -----------------------------------------------
@@ -36,6 +36,12 @@ class FakeSshClient:
         self.fail_connect: Exception | None = None
         self.fail_open_sftp: Exception | None = None
         self.sftp_returned: Any = object()  # sentinel
+        # exec_command knobs.
+        self.exec_calls: list[tuple[str, float | None]] = []
+        self.exec_stdout: bytes = b""
+        self.exec_stderr: bytes = b""
+        self.exec_exit_status: int = 0
+        self.fail_exec: Exception | None = None
         FakeSshClient.instances.append(self)
 
     def set_missing_host_key_policy(self, policy: Any) -> None:
@@ -52,8 +58,46 @@ class FakeSshClient:
             raise self.fail_open_sftp
         return self.sftp_returned
 
+    def exec_command(self, command: str, timeout: float | None = None) -> Any:
+        self.exec_calls.append((command, timeout))
+        if self.fail_exec:
+            raise self.fail_exec
+        return _fake_streams(self.exec_stdout, self.exec_stderr, self.exec_exit_status)
+
     def close(self) -> None:
         self.closed = True
+
+
+class _FakeChannel:
+    def __init__(self, status: int) -> None:
+        self._status = status
+
+    def recv_exit_status(self) -> int:
+        return self._status
+
+
+class _FakeStdout:
+    def __init__(self, data: bytes, status: int) -> None:
+        self._data = data
+        self.channel = _FakeChannel(status)
+
+    def read(self) -> bytes:
+        return self._data
+
+
+class _FakeStream:
+    def __init__(self, data: bytes = b"") -> None:
+        self._data = data
+
+    def read(self) -> bytes:
+        return self._data
+
+    def close(self) -> None:
+        pass
+
+
+def _fake_streams(out: bytes, err: bytes, status: int) -> tuple[_FakeStream, _FakeStdout, _FakeStream]:
+    return _FakeStream(), _FakeStdout(out, status), _FakeStream(err)
 
 
 @pytest.fixture(autouse=True)
@@ -188,3 +232,60 @@ def test_open_sftp_wraps_failure() -> None:
     FakeSshClient.instances[-1].fail_open_sftp = paramiko.SSHException("no channel")
     with pytest.raises(SshError, match="sftp open failed"):
         sess.open_sftp()
+
+
+# --- exec -------------------------------------------------------------------
+
+
+def test_exec_returns_status_stdout_stderr() -> None:
+    sess = SshSession(_settings())
+    sess.connect()
+    fake = FakeSshClient.instances[-1]
+    fake.exec_stdout = b"hello\n"
+    fake.exec_stderr = b"warn\n"
+    fake.exec_exit_status = 0
+    status, out, err = sess.exec("/system/identity print")
+    assert status == 0
+    assert out == "hello\n"
+    assert err == "warn\n"
+    assert fake.exec_calls == [("/system/identity print", None)]
+
+
+def test_exec_passes_timeout() -> None:
+    sess = SshSession(_settings())
+    sess.connect()
+    sess.exec("/log print", timeout=2.5)
+    fake = FakeSshClient.instances[-1]
+    assert fake.exec_calls[-1] == ("/log print", 2.5)
+
+
+def test_exec_decodes_invalid_utf8_replacement() -> None:
+    """Garbled bytes shouldn't crash exec; they get the U+FFFD treatment."""
+    sess = SshSession(_settings())
+    sess.connect()
+    FakeSshClient.instances[-1].exec_stdout = b"ok\xff\xfeend"
+    status, out, _ = sess.exec("/log print")
+    assert status == 0
+    assert out.startswith("ok")
+    assert out.endswith("end")
+
+
+def test_exec_requires_active_connection() -> None:
+    with pytest.raises(SshError, match="not connected"):
+        SshSession(_settings()).exec("/log print")
+
+
+def test_exec_wraps_paramiko_failure() -> None:
+    sess = SshSession(_settings())
+    sess.connect()
+    FakeSshClient.instances[-1].fail_exec = paramiko.SSHException("channel reset")
+    with pytest.raises(SshError, match="exec failed"):
+        sess.exec("/log print")
+
+
+def test_exec_wraps_oserror() -> None:
+    sess = SshSession(_settings())
+    sess.connect()
+    FakeSshClient.instances[-1].fail_exec = OSError("socket closed")
+    with pytest.raises(SshError, match="exec failed"):
+        sess.exec("/log print")

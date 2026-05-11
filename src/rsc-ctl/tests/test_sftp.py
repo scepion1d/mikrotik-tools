@@ -1,4 +1,4 @@
-"""Tests for ``rsc_deploy.sftp.SftpClient``.
+"""Tests for ``rsc_ctl.sftp.SftpClient``.
 
 We don't talk to a real router. A small fake stands in for
 ``paramiko.SFTPClient`` so we can assert the wrapper's behaviour:
@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import paramiko  # noqa: E402
 import pytest  # noqa: E402
 
-from rsc_deploy.sftp import SftpClient, SftpError  # noqa: E402
+from rsc_ctl.sftp import SftpClient, SftpError  # noqa: E402
 
 
 # --- fake paramiko.SFTPClient ----------------------------------------------

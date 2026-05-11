@@ -1,6 +1,6 @@
 # mikrotik-tools
 
-Python CLIs + libraries for working with RouterOS `.rsc` configs: bundle a profile folder into one minimal file, diff two configs into an apply-able patch, deploy `.rsc` files over SSH/SFTP. All tools share a single parser/identity model.
+Python CLIs + libraries for working with RouterOS `.rsc` configs: bundle a profile folder into one minimal file, diff two configs into an apply-able patch, control the router (upload, download, backup) over SSH/SFTP. All tools share a single parser/identity model.
 
 ## Tools
 
@@ -9,7 +9,7 @@ Python CLIs + libraries for working with RouterOS `.rsc` configs: bundle a profi
 | [`rsc-parser`](src/rsc-parser/)       | **Library.** Parse `.rsc` → indexed `Config`, resolve stable `iac.*` ids (with synthetic fallback).      |
 | [`rsc-bundle`](src/rsc-bundle/)       | **CLI + lib.** Bundle a flat `rsc/<profile>/` folder into one minimal deploy-ready `.rsc`.               |
 | [`rsc-diff`](src/rsc-diff/)           | **CLI + lib.** Diff two `.rsc` files into a patch; e2e roundtrip mode emits + verifies fwd/back patches. |
-| [`rsc-deploy`](src/rsc-deploy/)       | **CLI + lib.** Upload `.rsc` files over SSH/SFTP. Currently **blocked** (see its README).                |
+| [`rsc-ctl`](src/rsc-ctl/)             | **CLI + lib.** SSH/SFTP control plane for RouterOS: upload, download, trigger router-side backup.       |
 
 ## Layout
 
@@ -19,7 +19,7 @@ tools/
 │   ├── rsc-parser/          shared library
 │   ├── rsc-bundle/          depends on rsc-parser
 │   ├── rsc-diff/            depends on rsc-parser
-│   └── rsc-deploy/          standalone (paramiko)
+│   └── rsc-ctl/             standalone (paramiko)
 ├── bin/                     gitignored: tool shims (.cmd / symlink)
 └── build.ps1                sync all tools, refresh shims in bin/
 ```
@@ -30,7 +30,7 @@ tools/
 - **[uv](https://docs.astral.sh/uv/)** for venv + dependency management (one venv per tool under `src/<tool>/.venv/`)
 - Runtime:
   - `rsc-parser` / `rsc-bundle` / `rsc-diff` — zero external deps
-  - `rsc-deploy` — `paramiko`
+  - `rsc-ctl` — `paramiko`
 - Dev: `pytest` (per-tool dev dependency group)
 
 The repo-root `build.ps1` runs each tool's `build.ps1` (which calls `uv sync`), then symlinks (or `.cmd`-shims, when symlink privilege is missing) each console script into `tools/bin/`.
@@ -72,8 +72,9 @@ $candidate = (Get-ChildItem ..\out\segmented-*.rsc | Sort Name | Select -Last 1)
 # Both legs must report "OK -- differ reports no residual drift" before proceeding.
 
 # 4. apply on router
-#    (rsc-deploy is blocked; until then, upload via Winbox Files panel + terminal:)
-#    /import file-name=rollforward.rsc
+#    Upload the patch to flash, then import it from the router console:
+.\bin\rsc-ctl.cmd upload --src ..\out\rollforward.rsc --dst rollforward.rsc
+#    (in Winbox / SSH terminal): /import file-name=rollforward.rsc
 ```
 
 Per-tool details, full `--help` output, and known issues live in each tool's README.
@@ -109,4 +110,4 @@ uv run pytest -q --cov          # tool-local coverage report
 | `rsc-parser` | ✅ stable                                                                                              |
 | `rsc-bundle` | ✅ stable                                                                                              |
 | `rsc-diff`   | ✅ stable; roundtrip mode catches missing `defaults.py` entries automatically                          |
-| `rsc-deploy` | ❌ blocked: `Error reading SSH protocol banner` against test router. Use Winbox Files panel + `/import`. |
+| `rsc-ctl`    | ✅ stable; SFTP upload/download + `/system/backup save` + `/export show-sensitive` working end-to-end. |

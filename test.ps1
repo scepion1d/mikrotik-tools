@@ -21,14 +21,14 @@
 # mapping and report formatting.
 #
 # Why per-tool venvs at all? Each tool is a standalone uv project with
-# its own dependency closure (rsc-deploy needs paramiko, rsc-bundle pulls
+# its own dependency closure (rsc-ctl needs paramiko, rsc-bundle pulls
 # rsc-parser as a path dep, etc.). A single shared test venv would
 # entangle those. Per-tool data files + a combine step gives us one
 # aggregated report without sacrificing per-tool isolation.
 
 [CmdletBinding()]
 param(
-    [string[]] $Tools = @('rsc-parser','rsc-diff','rsc-bundle','rsc-deploy'),
+    [string[]] $Tools = @('rsc-parser','rsc-diff','rsc-bundle','rsc-ctl'),
     [switch]   $NoCoverage,
     [switch]   $Html,
     [int]      $FailUnder = 0

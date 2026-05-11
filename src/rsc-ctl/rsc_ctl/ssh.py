@@ -1,7 +1,7 @@
 """SSH session wrapper around :class:`paramiko.SSHClient`.
 
 Owns the lifecycle of one SSH connection to a RouterOS device. Today the
-only thing layered on top is SFTP (see :class:`rsc_deploy.sftp.SftpClient`),
+only thing layered on top is SFTP (see :class:`rsc_ctl.sftp.SftpClient`),
 but the same session is the natural place to grow ``exec_command`` (e.g.
 to trigger ``/import file-name=...`` after upload) or interactive shells.
 
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from .sftp import SftpClient
 
 
-log = logging.getLogger("rsc_deploy")
+log = logging.getLogger("rsc_ctl")
 
 
 class SshError(Exception):
@@ -106,7 +106,7 @@ class SshSession:
     def open_sftp(self) -> "SftpClient":
         """Open an SFTP channel over this session.
 
-        Returns a :class:`rsc_deploy.sftp.SftpClient` wrapper around
+        Returns a :class:`rsc_ctl.sftp.SftpClient` wrapper around
         ``paramiko.SFTPClient``. The wrapper is a context manager and
         should be closed independently of the SSH session.
         """
@@ -120,6 +120,34 @@ class SshSession:
         except paramiko.SSHException as exc:
             raise SshError(f"sftp open failed: {exc}") from exc
         return SftpClient(sftp)
+
+    def exec(
+        self, command: str, *, timeout: float | None = None
+    ) -> tuple[int, str, str]:
+        """Execute *command* on the remote and wait for it to finish.
+
+        Returns ``(exit_status, stdout, stderr)`` as decoded UTF-8 strings.
+        ``timeout`` (seconds) caps how long we wait for completion.
+
+        RouterOS-specific note: most failures are reported on **stdout**
+        as ``failure: <message>`` rather than via a non-zero exit status
+        or ``stderr``. Callers should scan the captured ``stdout`` for
+        ``failure:`` markers in addition to checking the exit status.
+        """
+        client = self._require_connected()
+        log.info("exec: %s", command)
+        try:
+            stdin, stdout, stderr = client.exec_command(command, timeout=timeout)
+            stdin.close()
+            # Read everything before fetching the exit status -- the channel
+            # is only flagged "exit_status_ready" once the remote side closes
+            # its end, which happens after stdout/stderr are drained.
+            out = stdout.read().decode("utf-8", errors="replace")
+            err = stderr.read().decode("utf-8", errors="replace")
+            status = stdout.channel.recv_exit_status()
+        except (paramiko.SSHException, OSError) as exc:
+            raise SshError(f"exec failed: {exc}") from exc
+        return status, out, err
 
     # --- internals ----------------------------------------------------------
 

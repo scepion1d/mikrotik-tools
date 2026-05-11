@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest  # noqa: E402
 
-from rsc_deploy.config import EnvError, Settings, load_env, parse_env_text  # noqa: E402
+from rsc_ctl.config import EnvError, Settings, load_env, parse_env_text  # noqa: E402
 
 
 # --- parse_env_text ---------------------------------------------------------

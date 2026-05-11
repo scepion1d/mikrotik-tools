@@ -1,13 +1,16 @@
-"""Command-line entry point for rsc-deploy.
+"""Command-line entry point for rsc-ctl.
 
-Two subcommands::
+Three subcommands::
 
-    rsc-deploy upload   --src LOCAL  --dst REMOTE  [--env ENV] [--dry-run] [-v]
-    rsc-deploy download --src REMOTE --dst LOCAL   [--env ENV] [--dry-run] [-v]
+    rsc-ctl upload   --src LOCAL  --dst REMOTE  [--env ENV] [--dry-run] [-v]
+    rsc-ctl download --src REMOTE --dst LOCAL   [--env ENV] [--dry-run] [-v]
+    rsc-ctl backup   [--password PW | --no-encrypt] [--env ENV] [--dry-run] [-v]
 
-Both subcommands require ``--src`` and ``--dst``. The destination's
-parent directory is created if missing; an existing file at the
-destination is overwritten.
+``upload`` and ``download`` require ``--src`` and ``--dst``. The
+destination's parent directory is created if missing; an existing file
+at the destination is overwritten. ``backup`` triggers a router-side
+snapshot under ``backups/<timestamp>/`` and prints the folder path on
+stdout.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import logging
 import sys
 from pathlib import Path
 
+from .backup import BackupError, create_backup
 from .config import EnvError, load_env
 from .deployer import DeployError, download, upload
 from .sftp import SftpError
@@ -37,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     if not args.command:
         # argparse with required=False on subparsers prints nothing on
         # bare invocation; make the failure visible.
-        print("rsc-deploy: missing subcommand (upload|download); use -h", file=sys.stderr)
+        print("rsc-ctl: missing subcommand (upload|download); use -h", file=sys.stderr)
         return 2
 
     _configure_logging(args.verbose)
@@ -46,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         settings = load_env(env_path)
     except EnvError as exc:
-        print(f"rsc-deploy: {exc}", file=sys.stderr)
+        print(f"rsc-ctl: {exc}", file=sys.stderr)
         return 2
 
     try:
@@ -54,11 +58,21 @@ def main(argv: list[str] | None = None) -> int:
             upload(args.src, args.dst, settings, dry_run=args.dry_run)
         elif args.command == "download":
             download(args.src, args.dst, settings, dry_run=args.dry_run)
+        elif args.command == "backup":
+            password = None if args.no_encrypt else args.password
+            folder = create_backup(
+                settings,
+                password=password,
+                dry_run=args.dry_run,
+            )
+            # Print the folder so it's machine-readable for chained pipelines
+            # (e.g. `for /f %f in ('rsc-ctl backup ...') do ...`).
+            print(folder)
         else:  # pragma: no cover -- argparse keeps choices honest
-            print(f"rsc-deploy: unknown subcommand: {args.command}", file=sys.stderr)
+            print(f"rsc-ctl: unknown subcommand: {args.command}", file=sys.stderr)
             return 2
-    except (DeployError, SshError, SftpError) as exc:
-        print(f"rsc-deploy: {exc}", file=sys.stderr)
+    except (DeployError, BackupError, SshError, SftpError) as exc:
+        print(f"rsc-ctl: {exc}", file=sys.stderr)
         return 1
 
     return 0
@@ -69,10 +83,14 @@ def main(argv: list[str] | None = None) -> int:
 
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="rsc-deploy",
-        description="Copy a single file between the workstation and a RouterOS device over SSH/SFTP.",
+        prog="rsc-ctl",
+        description=(
+            "SSH/SFTP control plane for a RouterOS device. Subcommands: "
+            "upload (local -> router), download (router -> local), backup "
+            "(trigger a router-side snapshot under backups/<timestamp>/)."
+        ),
     )
-    sub = parser.add_subparsers(dest="command", metavar="{upload,download}")
+    sub = parser.add_subparsers(dest="command", metavar="{upload,download,backup}")
 
     up = sub.add_parser(
         "upload",
@@ -107,6 +125,29 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     down.add_argument("--dst", type=Path, required=True, help="local destination file path")
     _add_common_flags(down)
+
+    bk = sub.add_parser(
+        "backup",
+        help="trigger a router-side backup snapshot under backups/<timestamp>/",
+        description=(
+            "Run /system/backup save and /export show-sensitive on the "
+            "router. Both files land in a fresh backups/<timestamp>/ "
+            "folder on flash (live.backup + live.rsc). Prints the folder "
+            "path on stdout."
+        ),
+    )
+    enc = bk.add_mutually_exclusive_group()
+    enc.add_argument(
+        "--password",
+        default=None,
+        help="encrypt the .backup file with this password (off by default)",
+    )
+    enc.add_argument(
+        "--no-encrypt",
+        action="store_true",
+        help="explicitly request an unencrypted .backup (the default already)",
+    )
+    _add_common_flags(bk)
 
     return parser
 
@@ -143,6 +184,6 @@ def _configure_logging(verbose: int) -> None:
     )
     # Default to INFO for our package even without -v -- one-liner
     # transfers benefit from progress feedback.
-    logging.getLogger("rsc_deploy").setLevel(
+    logging.getLogger("rsc_ctl").setLevel(
         logging.INFO if verbose == 0 else level
     )

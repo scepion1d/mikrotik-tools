@@ -30,7 +30,7 @@ from pathlib import Path, PurePosixPath
 import paramiko
 
 
-log = logging.getLogger("rsc_deploy")
+log = logging.getLogger("rsc_ctl")
 
 
 class SftpError(Exception):
@@ -40,7 +40,7 @@ class SftpError(Exception):
 class SftpClient:
     """Context manager wrapping one ``paramiko.SFTPClient`` channel.
 
-    Constructed by :meth:`rsc_deploy.ssh.SshSession.open_sftp`. The
+    Constructed by :meth:`rsc_ctl.ssh.SshSession.open_sftp`. The
     channel is closed on ``__exit__`` (or via :meth:`close`); the parent
     SSH session is left alone -- that's the SshSession's responsibility.
     """

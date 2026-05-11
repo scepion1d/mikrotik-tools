@@ -25,8 +25,8 @@ Public API
 - :func:`download`   -- entry point for remote -> local.
 - :class:`DeployError` -- raised for orchestrator input/validation
   errors. Lower-level transport errors surface as
-  :class:`rsc_deploy.ssh.SshError` or
-  :class:`rsc_deploy.sftp.SftpError`.
+  :class:`rsc_ctl.ssh.SshError` or
+  :class:`rsc_ctl.sftp.SftpError`.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from .config import Settings
 from .ssh import SshSession
 
 
-log = logging.getLogger("rsc_deploy")
+log = logging.getLogger("rsc_ctl")
 
 
 class DeployError(Exception):
