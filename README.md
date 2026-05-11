@@ -1,25 +1,25 @@
 # mikrotik-tools
 
-Python CLIs + libraries for working with RouterOS `.rsc` configs: bundle a profile folder into one minimal file, diff two configs into an apply-able patch, control the router (upload, download, backup) over SSH/SFTP. All tools share a single parser/identity model.
+Two Python tools for working with a MikroTik RouterOS device:
 
-## Tools
+| Tool                           | Role                                                                       |
+| ------------------------------ | -------------------------------------------------------------------------- |
+| [`rsc`](src/rsc/)              | **Script processing.** Parser library + `bundle` + `diff` subcommands.    |
+| [`mtctl`](src/mtctl/)          | **Router control.** SSH/SFTP: upload, download, trigger router-side backup. |
 
-| Tool                                  | One-liner                                                                                                |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| [`rsc-parser`](src/rsc-parser/)       | **Library.** Parse `.rsc` → indexed `Config`, resolve stable `iac.*` ids (with synthetic fallback).      |
-| [`rsc-bundle`](src/rsc-bundle/)       | **CLI + lib.** Bundle a flat `rsc/<profile>/` folder into one minimal deploy-ready `.rsc`.               |
-| [`rsc-diff`](src/rsc-diff/)           | **CLI + lib.** Diff two `.rsc` files into a patch; e2e roundtrip mode emits + verifies fwd/back patches. |
-| [`rsc-ctl`](src/rsc-ctl/)             | **CLI + lib.** SSH/SFTP control plane for RouterOS: upload, download, trigger router-side backup.       |
+`rsc` is offline / read-only; `mtctl` talks to the device.
 
 ## Layout
 
 ```
 tools/
 ├── src/
-│   ├── rsc-parser/          shared library
-│   ├── rsc-bundle/          depends on rsc-parser
-│   ├── rsc-diff/            depends on rsc-parser
-│   └── rsc-ctl/             standalone (paramiko)
+│   ├── rsc/                 one venv, one CLI ('rsc'), three subpackages
+│   │   └── rsc/
+│   │       ├── parser/      shared parser + identity model (library)
+│   │       ├── bundle/      'rsc bundle' subcommand
+│   │       └── diff/        'rsc diff' subcommand
+│   └── mtctl/               standalone (paramiko)
 ├── bin/                     gitignored: tool shims (.cmd / symlink)
 └── build.ps1                sync all tools, refresh shims in bin/
 ```
@@ -29,8 +29,8 @@ tools/
 - **Python ≥ 3.10**
 - **[uv](https://docs.astral.sh/uv/)** for venv + dependency management (one venv per tool under `src/<tool>/.venv/`)
 - Runtime:
-  - `rsc-parser` / `rsc-bundle` / `rsc-diff` — zero external deps
-  - `rsc-ctl` — `paramiko`
+  - `rsc` — zero external deps
+  - `mtctl` — `paramiko`
 - Dev: `pytest` (per-tool dev dependency group)
 
 The repo-root `build.ps1` runs each tool's `build.ps1` (which calls `uv sync`), then symlinks (or `.cmd`-shims, when symlink privilege is missing) each console script into `tools/bin/`.
@@ -45,7 +45,7 @@ The repo-root `build.ps1` runs each tool's `build.ps1` (which calls `uv sync`), 
 Per-tool reinstall:
 
 ```powershell
-cd src\rsc-bundle
+cd src\rsc
 .\build.ps1            # uv sync this tool only
 .\build.ps1 -Clean     # nuke .venv first
 ```
@@ -56,24 +56,24 @@ End-to-end pipeline:
 
 ```powershell
 # 1. bundle a profile -> single self-contained .rsc
-.\bin\rsc-bundle.cmd --profile ..\rsc\segmented -o ..\out
+.\bin\rsc.cmd bundle ..\rsc\segmented -o ..\out
 # -> ..\out\segmented-YYMMDD-XXXXX.rsc
 
 # 2. capture live router state
-#    (in Winbox terminal): /export terse file=live
-#    drag /file/live.rsc off the router into ..\out\live.rsc
+.\bin\mtctl.cmd backup --no-encrypt
+#    -> backups/<timestamp>/{live.backup, live.rsc} on the router
+.\bin\mtctl.cmd download --src backups/<timestamp>/live.rsc --dst ..\out\live.rsc
 
 # 3. emit + verify both patches in one go
 $candidate = (Get-ChildItem ..\out\segmented-*.rsc | Sort Name | Select -Last 1).FullName
-.\bin\rsc-diff.cmd --old ..\out\live.rsc --new $candidate `
+.\bin\rsc.cmd diff --old ..\out\live.rsc --new $candidate `
     --rollforward ..\out\rollforward.rsc `
     --rollback   ..\out\rollback.rsc `
     --lenient
 # Both legs must report "OK -- differ reports no residual drift" before proceeding.
 
 # 4. apply on router
-#    Upload the patch to flash, then import it from the router console:
-.\bin\rsc-ctl.cmd upload --src ..\out\rollforward.rsc --dst rollforward.rsc
+.\bin\mtctl.cmd upload --src ..\out\rollforward.rsc --dst rollforward.rsc
 #    (in Winbox / SSH terminal): /import file-name=rollforward.rsc
 ```
 
@@ -81,14 +81,14 @@ Per-tool details, full `--help` output, and known issues live in each tool's REA
 
 ## Tests + coverage
 
-Run all four tool test suites with combined coverage from `tools/`:
+Run both tool test suites with combined coverage from `tools/`:
 
 ```powershell
-.\test.ps1                      # all tools, combined coverage report
-.\test.ps1 -Tools rsc-bundle    # one tool only (still produces coverage)
-.\test.ps1 -NoCoverage          # skip the coverage step
-.\test.ps1 -Html                # also write tools\.coverage-html\
-.\test.ps1 -FailUnder 80        # exit 2 if total coverage < 80%
+.\test.ps1                  # both tools, combined coverage report
+.\test.ps1 -Tools rsc       # one tool only (still produces coverage)
+.\test.ps1 -NoCoverage      # skip the coverage step
+.\test.ps1 -Html            # also write tools\.coverage-html\
+.\test.ps1 -FailUnder 80    # exit 2 if total coverage < 80%
 ```
 
 `test.ps1` runs each tool's `pytest` in its own venv (so dependency isolation is preserved) and points each run's `COVERAGE_FILE` at a unique file under `tools/.coverage-data/`. After all suites finish, it runs `coverage combine` + `coverage report` against the central `.coveragerc`. The HTML report (when `-Html`) lands in `tools/.coverage-html/`.
@@ -98,16 +98,14 @@ Per-tool coverage measurement is configured in each `pyproject.toml` under `[too
 Single-tool, ad-hoc:
 
 ```powershell
-cd src\rsc-bundle
+cd src\rsc
 uv run pytest -q                # no coverage
 uv run pytest -q --cov          # tool-local coverage report
 ```
 
 ## Status
 
-| Tool         | State                                                                                                  |
-| ------------ | ------------------------------------------------------------------------------------------------------ |
-| `rsc-parser` | ✅ stable                                                                                              |
-| `rsc-bundle` | ✅ stable                                                                                              |
-| `rsc-diff`   | ✅ stable; roundtrip mode catches missing `defaults.py` entries automatically                          |
-| `rsc-ctl`    | ✅ stable; SFTP upload/download + `/system/backup save` + `/export show-sensitive` working end-to-end. |
+| Tool   | State                                                                                                           |
+| ------ | --------------------------------------------------------------------------------------------------------------- |
+| `rsc`  | ✅ stable; `bundle` + `diff` working; `diff` roundtrip mode verifies fwd+back patches in-memory.               |
+| `mtctl`| ✅ stable; SFTP upload/download + `/system/backup save` + `/export show-sensitive` working end-to-end.         |

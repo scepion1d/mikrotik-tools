@@ -15,10 +15,8 @@ data_file = .coverage-data/.coverage
 # Map per-tool source paths to a single canonical name so the combined
 # report doesn't list the same package under multiple paths.
 source =
-    src/rsc-parser/rsc_parser
-    src/rsc-bundle/rsc_bundle
-    src/rsc-diff/rsc_diff
-    src/rsc-ctl/rsc_ctl
+    src/rsc/rsc
+    src/mtctl/mtctl
 
 [report]
 show_missing = true

@@ -27,39 +27,32 @@ foreach ($tool in Get-ChildItem -Directory (Join-Path $root 'src')) {
     }
 
     $scripts = Join-Path $tool.FullName '.venv\Scripts'
-    
+
     # Convention: one console script per tool, named "<tool>.exe", produced
     # by uv sync from [project.scripts] in pyproject.toml.
-    $exe = Join-Path $scripts "$($tool.Name).exe"
+    $name = $tool.Name
+    $exe  = Join-Path $scripts "$name.exe"
     if (-not (Test-Path -LiteralPath $exe)) {
-        Write-Warning "no $($tool.Name).exe in $scripts"
+        Write-Warning "no $name.exe in $scripts"
         continue
     }
 
-    foreach ($name in $names) {
-        $exe = Join-Path $scripts "$name.exe"
-        if (-not (Test-Path -LiteralPath $exe)) {
-            Write-Warning "no $name.exe in $scripts"
-            continue
-        }
+    # Wipe any stale shim/symlink for this name (.exe and .cmd) before relinking.
+    foreach ($ext in '.exe', '.cmd') {
+        $stale = Join-Path $bin "$name$ext"
+        if (Test-Path -LiteralPath $stale) { Remove-Item -LiteralPath $stale -Force }
+    }
 
-        # Wipe any stale shim/symlink for this name (.exe and .cmd) before relinking.
-        foreach ($ext in '.exe', '.cmd') {
-            $stale = Join-Path $bin "$name$ext"
-            if (Test-Path -LiteralPath $stale) { Remove-Item -LiteralPath $stale -Force }
-        }
-
-        $link = Join-Path $bin "$name.exe"
-        try {
-            New-Item -ItemType SymbolicLink -Path $link -Target $exe | Out-Null
-            Write-Host "    bin\$name.exe -> symlink"
-        } catch {
-            # No SeCreateSymbolicLink (need admin or Developer Mode) -- fall back
-            # to a tiny .cmd shim that forwards args.
-            $cmd = [IO.Path]::ChangeExtension($link, '.cmd')
-            Set-Content -LiteralPath $cmd -Value "@`"$exe`" %*" -Encoding ASCII
-            Write-Host "    bin\$name.cmd -> shim (no symlink privilege)"
-        }
+    $link = Join-Path $bin "$name.exe"
+    try {
+        New-Item -ItemType SymbolicLink -Path $link -Target $exe | Out-Null
+        Write-Host "    bin\$name.exe -> symlink"
+    } catch {
+        # No SeCreateSymbolicLink (need admin or Developer Mode) -- fall back
+        # to a tiny .cmd shim that forwards args.
+        $cmd = [IO.Path]::ChangeExtension($link, '.cmd')
+        Set-Content -LiteralPath $cmd -Value "@`"$exe`" %*" -Encoding ASCII
+        Write-Host "    bin\$name.cmd -> shim (no symlink privilege)"
     }
 }
 
