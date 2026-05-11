@@ -15,6 +15,9 @@ Classifications
   positional shift hazards.
 - :data:`MENUS_SINGLETON` -- settings-blocks that hold a single implicit
   item; only ``set`` operations make sense. Identity is the menu path.
+- :data:`MENU_ORDER` -- canonical apply-time ordering used by the differ
+  to emit ops in dependency order (so referenced rows exist before the
+  rows that name them).
 
 Adding a menu
 -------------
@@ -83,6 +86,68 @@ MENUS_SINGLETON: frozenset[str] = frozenset(
         "/system/routerboard/mode-button",
         "/system/routerboard/wps-button",
     }
+)
+
+
+# Canonical apply-time order for emitted operations. Newly-added rows in
+# menu A may reference rows in menu B by name (e.g.,
+# ``/interface/wifi/configuration`` rows reference
+# ``/interface/wifi/datapath`` via ``datapath=``); RouterOS rejects the
+# add at apply time if the target doesn't yet exist. Default alphabetic
+# emission order breaks for several real dependencies, so the differ
+# sorts menus by their position in this tuple.
+#
+# Menus not listed here fall into a final alphabetic bucket emitted
+# AFTER everything in this tuple. Keep new additions conservative: only
+# add a menu when it has a real ordering dependency on (or from) another
+# menu, and place it AFTER everything it references.
+#
+# This is also the order ``rsc.bundle.compact`` emits when it follows
+# the parsed source -- author-controlled ``NN-*.rsc`` files already lay
+# things out in dependency order, so the bundle output naturally agrees
+# with this tuple. Keeping diff and bundle aligned makes round-trip
+# verification (apply diff -> /export -> compare to bundle) stable.
+MENU_ORDER: tuple[str, ...] = (
+    # ---- L1/L2: physical interfaces and bridge plumbing ---------------
+    "/interface/list",                # named bag, used by /interface/list/member
+    "/interface/ethernet",            # rename ether1..N
+    "/interface/bridge",              # creates iac.bridge.lan
+    "/interface/bridge/port",         # ether -> bridge
+    "/interface/bridge/vlan",         # VLAN table on the bridge
+    "/interface/vlan",                # L3 termination on the bridge
+    # ---- Wi-Fi hierarchy ----------------------------------------------
+    "/interface/wifi/datapath",       # referenced by configuration
+    "/interface/wifi/security",       # referenced by configuration
+    "/interface/wifi/channel",        # referenced by configuration
+    "/interface/wifi/configuration",  # referenced by /interface/wifi
+    "/interface/wifi",                # binds configuration to the radios
+    # ---- Interface list membership (depends on all interfaces above) --
+    "/interface/list/member",
+    # ---- L3: IP plane -------------------------------------------------
+    "/ip/address",                    # depends on /interface/vlan + bridge
+    "/ip/dhcp-client",                # depends on /interface/ethernet
+    "/ip/pool",                       # referenced by /ip/dhcp-server
+    "/ip/dhcp-server",                # depends on /ip/pool + /interface/vlan
+    "/ip/dhcp-server/network",        # depends on /ip/dhcp-server
+    "/ip/dhcp-server/lease",          # depends on /ip/dhcp-server (server=)
+    "/ip/dns",
+    "/ip/dns/static",
+    "/ip/firewall/nat",
+    "/ip/firewall/filter",
+    # ---- IPv6 ---------------------------------------------------------
+    "/ipv6/firewall/address-list",    # referenced by /ipv6/firewall/filter
+    "/ipv6/firewall/filter",
+    "/ipv6/nd",
+    # ---- Reference-heavy "settings" / late tools ----------------------
+    # These reference items created by earlier menus.
+    "/disk/settings",                 # auto-media-interface= -> /interface/vlan
+    "/ip/neighbor/discovery-settings",
+    "/tool/mac-server",
+    "/tool/mac-server/mac-winbox",
+    "/tool/mac-server/ping",
+    "/system/routerboard/mode-button",
+    "/system/routerboard/wps-button",
+    "/ip/service",                    # address= acl, depends on nothing critical
 )
 
 

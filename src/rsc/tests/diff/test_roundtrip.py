@@ -158,6 +158,109 @@ def test_positional_removes_emit_descending() -> None:
     assert keys == ["@anon=2", "@anon=1", "@anon=0"], keys
 
 
+def test_list_member_emitted_after_vlan() -> None:
+    """``/interface/list/member`` must be emitted AFTER ``/interface/vlan``.
+
+    Membership rows reference VLAN names via ``interface=``; alphabetic
+    order would put ``/interface/list/member`` before ``/interface/vlan``,
+    causing "input does not match any value of interface" on a fresh
+    deploy where neither side existed before.
+    """
+    from rsc.diff import Config, Item, diff
+
+    old = Config()  # empty router
+    new = Config()
+    new.add(Item(menu="/interface/list", verb="add", props={
+        "name": "iac.list.lan",
+    }))
+    new.add(Item(menu="/interface/vlan", verb="add", props={
+        "name": "iac.vlan.ext", "interface": "iac.bridge.lan", "vlan-id": "30",
+    }))
+    new.add(Item(menu="/interface/list/member", verb="add", props={
+        "list": "iac.list.lan", "interface": "iac.vlan.ext",
+    }))
+
+    ops = diff(old, new)
+    menu_order = [op.menu for op in ops if op.kind == "add"]
+    assert "/interface/vlan" in menu_order
+    assert "/interface/list/member" in menu_order
+    assert menu_order.index("/interface/vlan") < menu_order.index(
+        "/interface/list/member"
+    ), menu_order
+
+
+def test_wifi_configuration_emitted_after_datapath() -> None:
+    """``/interface/wifi/configuration`` must be emitted AFTER its deps.
+
+    Configuration rows reference ``datapath=``, ``security=``, and
+    ``channel=``; alphabetically ``configuration`` < ``datapath`` so
+    without an explicit canonical order the configuration add fires
+    first and RouterOS rejects it with "input does not match any value
+    of datapath".
+    """
+    from rsc.diff import Config, Item, diff
+
+    old = Config()  # empty router
+    new = Config()
+    new.add(Item(menu="/interface/wifi/datapath", verb="add", props={
+        "name": "iac.wifi.dp.ext", "bridge": "iac.bridge.lan", "vlan-id": "30",
+    }))
+    new.add(Item(menu="/interface/wifi/security", verb="add", props={
+        "name": "iac.wifi.sec.ext", "authentication-types": "wpa2-psk",
+    }))
+    new.add(Item(menu="/interface/wifi/channel", verb="add", props={
+        "name": "iac.wifi.ch.2g", "band": "2ghz-ax",
+    }))
+    new.add(Item(menu="/interface/wifi/configuration", verb="add", props={
+        "name": "iac.wifi.cfg.ext.2g", "mode": "ap",
+        "channel": "iac.wifi.ch.2g",
+        "security": "iac.wifi.sec.ext",
+        "datapath": "iac.wifi.dp.ext",
+    }))
+    new.add(Item(menu="/interface/wifi", verb="add", props={
+        "name": "iac.wifi.ext.2g",
+        "configuration": "iac.wifi.cfg.ext.2g",
+    }))
+
+    ops = diff(old, new)
+    menu_order = [op.menu for op in ops if op.kind == "add"]
+    # Each prerequisite must precede the menu that references it.
+    for dep in ("/interface/wifi/datapath",
+                "/interface/wifi/security",
+                "/interface/wifi/channel"):
+        assert menu_order.index(dep) < menu_order.index(
+            "/interface/wifi/configuration"
+        ), (dep, menu_order)
+    assert menu_order.index("/interface/wifi/configuration") < menu_order.index(
+        "/interface/wifi"
+    ), menu_order
+
+
+def test_unknown_menu_sorts_after_canonical() -> None:
+    """Menus not in MENU_ORDER are emitted after every canonical menu.
+
+    Guards against an unrecognised menu accidentally landing in the
+    middle of the canonical sequence and shifting dependents.
+    """
+    from rsc.diff import Config, Item, diff
+
+    old = Config()
+    new = Config()
+    # /interface/vlan is in MENU_ORDER; /something/unknown is not.
+    new.add(Item(menu="/interface/vlan", verb="add", props={
+        "name": "iac.vlan.x", "interface": "iac.bridge.lan", "vlan-id": "99",
+    }))
+    new.add(Item(menu="/zzz/never-heard-of-it", verb="add", props={
+        "name": "iac.x",
+    }))
+
+    ops = diff(old, new)
+    menu_order = [op.menu for op in ops if op.kind == "add"]
+    assert menu_order.index("/interface/vlan") < menu_order.index(
+        "/zzz/never-heard-of-it"
+    ), menu_order
+
+
 def test_default_value_treated_as_absent() -> None:
     """A property with the documented default value matches an absent prop."""
     from rsc.diff import Config, Item, diff

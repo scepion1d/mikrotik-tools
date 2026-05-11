@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from rsc.parser import (  # noqa: F401  (re-exports)
     IAC_PREFIX,
+    MENU_ORDER,
     MENUS_ORDERED,
     MENUS_SINGLETON,
     MENUS_WITH_NAME,
@@ -24,6 +25,7 @@ __all__ = [
     "Config",
     "IAC_PREFIX",
     "Item",
+    "MENU_ORDER",
     "MENUS_ORDERED",
     "MENUS_SINGLETON",
     "MENUS_WITH_NAME",

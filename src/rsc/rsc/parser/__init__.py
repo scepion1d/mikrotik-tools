@@ -31,12 +31,19 @@ Public API
 - :class:`Op` -- one diff operation (``add`` / ``set`` / ``remove`` / ...)
 - :func:`entity_id` -- bare ``iac.x.y.z`` id (synthetic when needed)
 - :func:`is_synthetic` -- True if entity_id derived the id vs read it
-- :data:`MENUS_WITH_NAME`, :data:`MENUS_ORDERED`, :data:`MENUS_SINGLETON`
+- :data:`MENUS_WITH_NAME`, :data:`MENUS_ORDERED`, :data:`MENUS_SINGLETON`,
+  :data:`MENU_ORDER`
 - :data:`IAC_PREFIX`
 """
 
 from .identity import entity_id, is_synthetic
-from .menus import IAC_PREFIX, MENUS_ORDERED, MENUS_SINGLETON, MENUS_WITH_NAME
+from .menus import (
+    IAC_PREFIX,
+    MENU_ORDER,
+    MENUS_ORDERED,
+    MENUS_SINGLETON,
+    MENUS_WITH_NAME,
+)
 from .model import Config, Item, Op
 from .parser import parse_file, parse_text
 
@@ -46,6 +53,7 @@ __all__ = [
     "Config",
     "IAC_PREFIX",
     "Item",
+    "MENU_ORDER",
     "MENUS_ORDERED",
     "MENUS_SINGLETON",
     "MENUS_WITH_NAME",

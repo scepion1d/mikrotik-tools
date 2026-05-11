@@ -16,7 +16,7 @@ default + computed handling, value comparison) live in
 
 from __future__ import annotations
 
-from .model import MENUS_ORDERED, MENUS_SINGLETON, Config, Item, Op
+from .model import MENU_ORDER, MENUS_ORDERED, MENUS_SINGLETON, Config, Item, Op
 from .props import (
     IDENTITY_PROPS,
     emit_props,
@@ -40,34 +40,10 @@ _PROTECTED_ROWS: frozenset[tuple[str, str]] = frozenset({
 })
 
 
-# Menus whose ``set`` ops reference NAMES of items created in OTHER
-# menus. Emitted last (after the menus that create those items), so the
-# router can validate the reference at apply time.
-#
-# Example: ``/disk/settings.auto-media-interface=iac.vlan.int`` requires
-# that ``iac.vlan.int`` already exist on ``/interface/vlan``. Default
-# alphabetic order would emit ``/disk/settings`` before
-# ``/interface/vlan`` -> "input does not match any value of
-# auto-media-interface".
-#
-# ``/interface/wifi`` is here because its rows carry ``configuration=`` /
-# ``master-interface=`` references to ``/interface/wifi/{configuration,
-# ...}`` items, and ``/interface/wifi`` sorts BEFORE its sub-paths
-# alphabetically (shorter string wins) so without bumping it would
-# activate before its configurations exist.
-#
-# Within this group, alphabetic order is preserved (relative ordering
-# only matters when one late menu references another, which is rare).
-_MENU_LATE: frozenset[str] = frozenset({
-    "/disk/settings",
-    "/interface/wifi",
-    "/ip/neighbor/discovery-settings",
-    "/tool/mac-server",
-    "/tool/mac-server/mac-winbox",
-    "/tool/mac-server/ping",
-    "/system/routerboard/mode-button",
-    "/system/routerboard/wps-button",
-})
+# Lookup table built from MENU_ORDER for O(1) sort-key resolution.
+# Menus listed in MENU_ORDER get their canonical index; menus not
+# listed fall into a final alphabetic bucket emitted afterwards.
+_MENU_ORDER_INDEX: dict[str, int] = {m: i for i, m in enumerate(MENU_ORDER)}
 
 
 # --- public entry point ----------------------------------------------------
@@ -110,14 +86,22 @@ def diff(
 # --- per-menu dispatch -----------------------------------------------------
 
 
-def _menu_sort_key(menu: str) -> tuple[int, str]:
-    """Sort menus alphabetically, but push reference-heavy "settings"
-    menus to the end so their ops run after the menus that create the
-    referenced items.
+def _menu_sort_key(menu: str) -> tuple[int, int, str]:
+    """Sort menus by canonical apply-time order.
 
-    Returns ``(bucket, menu)`` where bucket=0 is normal and bucket=1 is late.
+    Returns ``(bucket, index, menu)`` where:
+      - bucket=0: menu is in :data:`MENU_ORDER` -> use its index there.
+        These emit first, in the order that satisfies cross-menu
+        references (e.g., ``/interface/wifi/datapath`` before
+        ``/interface/wifi/configuration``).
+      - bucket=1: menu is unknown -> alphabetic, emitted after every
+        canonically-ordered menu. Safe default for menus that don't
+        reference anything (or are only referenced themselves).
     """
-    return (1 if menu in _MENU_LATE else 0, menu)
+    idx = _MENU_ORDER_INDEX.get(menu)
+    if idx is None:
+        return (1, 0, menu)
+    return (0, idx, menu)
 
 
 def _diff_menu(
