@@ -1,167 +1,163 @@
-"""SSH/SFTP deployer for RouterOS .rsc files."""
+"""Deploy entry points: single-file copy in either direction.
+
+Two operations, symmetric in signature and behaviour:
+
+- :func:`upload`   -- copy a local file to a remote path on the router.
+- :func:`download` -- copy a remote file from the router to a local path.
+
+In both directions the destination is **mandatory**, **created if its
+parent directory does not exist**, and **overwritten** if it already
+exists. Multi-file / directory walking is intentionally out of scope:
+the caller composes the loop.
+
+Pipeline (per call)
+-------------------
+1. Validate inputs (``src`` exists / ``dst`` non-empty).
+2. Pre-create the destination's parent directory
+   (:meth:`SftpClient.ensure_dir` for upload, ``Path.mkdir`` for
+   download).
+3. Open one :class:`SshSession` + :class:`SftpClient`; perform the
+   transfer (:meth:`SftpClient.put` or :meth:`SftpClient.get`).
+
+Public API
+----------
+- :func:`upload`     -- entry point for local -> remote.
+- :func:`download`   -- entry point for remote -> local.
+- :class:`DeployError` -- raised for orchestrator input/validation
+  errors. Lower-level transport errors surface as
+  :class:`rsc_deploy.ssh.SshError` or
+  :class:`rsc_deploy.sftp.SftpError`.
+"""
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import Iterable
-
-import paramiko
+from pathlib import Path, PurePosixPath
 
 from .config import Settings
+from .ssh import SshSession
 
 
 log = logging.getLogger("rsc_deploy")
 
-RSC_SUFFIX = ".rsc"
-
 
 class DeployError(Exception):
-    """Raised on connection or transfer failures."""
+    """Raised on deploy-orchestrator input/validation failures."""
 
 
-def deploy(
+def upload(
     src: str | Path,
+    dst: str,
     settings: Settings,
     *,
     dry_run: bool = False,
-    clean: bool = True,
 ) -> None:
-    """Connect to *settings.host* and deploy ``.rsc`` files from *src*.
+    """Upload local *src* file to remote *dst* path on the router.
 
-    *src* may be a single ``.rsc`` file or a directory walked recursively.
-    If *clean* is True (default), every existing ``*.rsc`` on the router's
-    flash root is deleted before upload (matches the flat-flash convention).
-    *dry_run* prints what would happen without touching the router.
+    *dst* is a POSIX-style path relative to flash root; missing parent
+    directories are created automatically. An existing remote file at
+    *dst* is overwritten.
     """
-    files = list(_collect_local_files(Path(src)))
-    if not files:
-        raise DeployError(f"no .rsc files found under {src}")
+    src_path = _validate_local_src(src)
+    remote = _normalize_remote(dst)
+    parent = _remote_parent(remote)
 
     log.info(
-        "deploy: src=%s files=%d host=%s clean=%s dry_run=%s",
-        src, len(files), settings.host, clean, dry_run,
+        "upload: src=%s dst=%s host=%s dry_run=%s",
+        src_path, remote, settings.host, dry_run,
     )
 
     if dry_run:
-        _dry_run_report(files, clean=clean)
+        if parent:
+            log.info("DRY RUN: would ensure remote directory: %s", parent)
+        log.info(
+            "DRY RUN: would upload %s -> %s  (%d bytes)",
+            src_path.name, remote, src_path.stat().st_size,
+        )
         return
 
-    with _connect(settings) as sftp:
-        if clean:
-            _clean_remote(sftp)
-        _upload_files(sftp, files)
+    with SshSession(settings) as ssh, ssh.open_sftp() as sftp:
+        if parent:
+            sftp.ensure_dir(parent)
+        sftp.put(src_path, remote)
+        log.info(
+            "  + %s -> %s  (%d bytes)",
+            src_path.name, remote, src_path.stat().st_size,
+        )
+
+
+def download(
+    src: str,
+    dst: str | Path,
+    settings: Settings,
+    *,
+    dry_run: bool = False,
+) -> None:
+    """Download remote *src* file from the router to local *dst* path.
+
+    *src* is a POSIX-style path relative to flash root. *dst* may include
+    parent directories that don't yet exist locally; they are created.
+    An existing local file at *dst* is overwritten.
+    """
+    remote = _normalize_remote(src)
+    dst_path = _validate_local_dst(dst)
+
+    log.info(
+        "download: src=%s dst=%s host=%s dry_run=%s",
+        remote, dst_path, settings.host, dry_run,
+    )
+
+    if dry_run:
+        if dst_path.parent != Path("") and not dst_path.parent.exists():
+            log.info("DRY RUN: would create local directory: %s", dst_path.parent)
+        log.info("DRY RUN: would download %s -> %s", remote, dst_path)
+        return
+
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with SshSession(settings) as ssh, ssh.open_sftp() as sftp:
+        size = sftp.stat_size(remote)
+        sftp.get(remote, dst_path)
+        log.info(
+            "  + %s -> %s  (%d bytes)",
+            remote, dst_path, size,
+        )
 
 
 # --- internals --------------------------------------------------------------
 
 
-def _collect_local_files(src: Path) -> Iterable[Path]:
-    """Yield .rsc files under *src* (or *src* itself if it's a single file)."""
-    if not src.exists():
-        raise DeployError(f"source path not found: {src}")
-    if src.is_file():
-        if src.suffix.lower() != RSC_SUFFIX:
-            raise DeployError(f"source file is not a {RSC_SUFFIX}: {src}")
-        yield src
-        return
-    if src.is_dir():
-        seen: set[str] = set()
-        for path in sorted(src.rglob(f"*{RSC_SUFFIX}")):
-            if not path.is_file():
-                continue
-            if path.name in seen:
-                raise DeployError(
-                    f"duplicate basename {path.name!r} -- "
-                    f"flat upload would lose one of them"
-                )
-            seen.add(path.name)
-            yield path
-        return
-    raise DeployError(f"source is neither file nor directory: {src}")
+def _validate_local_src(src: str | Path) -> Path:
+    """Resolve and validate a local source file path."""
+    p = Path(src)
+    if not p.exists():
+        raise DeployError(f"source path not found: {p}")
+    if not p.is_file():
+        raise DeployError(f"source is not a regular file: {p}")
+    return p
 
 
-def _dry_run_report(files: list[Path], *, clean: bool) -> None:
-    if clean:
-        log.info("DRY RUN: would delete every *.rsc on flash root")
-    log.info("DRY RUN: would upload %d file(s):", len(files))
-    for f in files:
-        log.info("  %s  (%d bytes)", f.name, f.stat().st_size)
+def _validate_local_dst(dst: str | Path) -> Path:
+    """Validate a local destination path. Empty rejected; existing file OK (overwrite)."""
+    if not str(dst):
+        raise DeployError("destination path is empty")
+    p = Path(dst)
+    if p.exists() and p.is_dir():
+        raise DeployError(f"destination is a directory, not a file: {p}")
+    return p
 
 
-def _connect(settings: Settings) -> "_SFTPSession":
-    """Open SSH + SFTP and return a context-manager wrapping both."""
-    log.info("connect: %s@%s:%d", settings.user, settings.host, settings.port)
-    client = paramiko.SSHClient()
-    # MVP: TOFU. Production hardening (known_hosts) is on the roadmap.
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    try:
-        client.connect(
-            hostname=settings.host,
-            port=settings.port,
-            username=settings.user,
-            password=settings.password,
-            timeout=settings.timeout,
-            look_for_keys=False,
-            allow_agent=False,
-        )
-    except (paramiko.SSHException, OSError) as exc:
-        raise DeployError(f"ssh connect failed: {exc}") from exc
-
-    try:
-        sftp = client.open_sftp()
-    except paramiko.SSHException as exc:
-        client.close()
-        raise DeployError(f"sftp open failed: {exc}") from exc
-
-    return _SFTPSession(client, sftp)
+def _normalize_remote(name: str) -> str:
+    """Normalize a user-supplied remote path: backslash -> slash, strip leading /."""
+    if not name:
+        raise DeployError("remote path is empty")
+    n = name.replace("\\", "/").lstrip("/")
+    if not n or n.endswith("/"):
+        raise DeployError(f"remote path must include a filename: {name!r}")
+    return n
 
 
-def _clean_remote(sftp: paramiko.SFTPClient) -> None:
-    """Delete every *.rsc at flash root on the router."""
-    log.info("clean: listing flash root for *.rsc")
-    try:
-        names = sftp.listdir(".")
-    except IOError as exc:
-        raise DeployError(f"listdir failed: {exc}") from exc
-
-    targets = [n for n in names if n.lower().endswith(RSC_SUFFIX)]
-    if not targets:
-        log.info("clean: nothing to delete")
-        return
-
-    log.info("clean: deleting %d file(s)", len(targets))
-    for name in sorted(targets):
-        try:
-            sftp.remove(name)
-        except IOError as exc:
-            raise DeployError(f"delete failed for {name!r}: {exc}") from exc
-        log.info("  - %s", name)
-
-
-def _upload_files(sftp: paramiko.SFTPClient, files: list[Path]) -> None:
-    """Upload each *.rsc to flash root using its basename."""
-    log.info("upload: %d file(s)", len(files))
-    for path in files:
-        try:
-            sftp.put(str(path), path.name)
-        except (IOError, paramiko.SSHException) as exc:
-            raise DeployError(f"upload failed for {path}: {exc}") from exc
-        log.info("  + %s  (%d bytes)", path.name, path.stat().st_size)
-
-
-class _SFTPSession:
-    """Context manager that closes both the SFTP channel and the SSH client."""
-
-    def __init__(self, client: paramiko.SSHClient, sftp: paramiko.SFTPClient):
-        self._client = client
-        self._sftp = sftp
-
-    def __enter__(self) -> paramiko.SFTPClient:
-        return self._sftp
-
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        try:
-            self._sftp.close()
-        finally:
-            self._client.close()
+def _remote_parent(remote_name: str) -> str:
+    """Return the POSIX parent directory of *remote_name*, or '' if at root."""
+    parent = PurePosixPath(remote_name).parent
+    return "" if str(parent) in (".", "/") else str(parent)
