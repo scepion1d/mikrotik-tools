@@ -132,6 +132,7 @@ MENU_ORDER: tuple[str, ...] = (
     "/ip/dhcp-server/lease",          # depends on /ip/dhcp-server (server=)
     "/ip/dns",
     "/ip/dns/static",
+    "/ip/firewall/address-list",      # referenced by /ip/firewall/{filter,nat,...}
     "/ip/firewall/nat",
     "/ip/firewall/filter",
     # ---- IPv6 ---------------------------------------------------------
