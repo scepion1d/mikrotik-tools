@@ -234,11 +234,13 @@ _ITEM_RESERVED = frozenset({"operation", "filter", "id", "id_pad", "comment"})
 
 
 def _render_item(menu_path: str, idx: int, item: dict[str, Any]) -> str:
-    """``{operation, filter?, id?, comment?, <props>}`` -> one .rsc line."""
-    try:
-        verb = item["operation"]
-    except KeyError:
-        raise YamlError(f"{menu_path}[{idx}] is missing `operation`") from None
+    """``{operation?, filter?, id?, comment?, <props>}`` -> one .rsc line.
+
+    `operation` defaults to ``add`` when omitted -- it's by far the most
+    common verb (every fresh row uses it), and `set` rows already
+    distinguish themselves with `filter:`.
+    """
+    verb = item.get("operation", "add")
     if not isinstance(verb, str) or not verb:
         raise YamlError(f"{menu_path}[{idx}].operation must be a non-empty string")
 
@@ -303,16 +305,49 @@ def _render_item(menu_path: str, idx: int, item: dict[str, Any]) -> str:
 
 # --- value rendering --------------------------------------------------------
 
+# `$NAME` -- bare :global reference (sigil shorthand for `{var: NAME}`).
+# Restricted to a RouterOS-identifier-shaped name so we don't accidentally
+# capture stray strings that happen to start with `$`.
+_VAR_SIGIL_RE = re.compile(r"^\$([A-Za-z_][A-Za-z0-9_]*)$")
+# `$(...)` -- bracket-expression sigil (shorthand for `{expr: ...}`). The
+# parens act as the boundary; everything between them goes into the
+# rendered `[...]` verbatim.
+_EXPR_SIGIL_RE = re.compile(r"^\$\((.+)\)$", re.DOTALL)
+
 
 def _render_value(menu_path: str, idx: int, key: str, value: Any) -> str:
     """Render a single property value.
 
-    Recognises the two structured forms from the schema:
-    ``{var: NAME}``  -> ``$NAME``  (resolved by the bundler's flatten pass)
-    ``{expr: '...'}``-> ``[...]``  (RouterOS bracket expression)
+    Three structured forms are recognised:
 
-    Plain scalars go through :func:`_quote`.
+    1. **String sigils** -- the compact form, used in most YAMLs::
+
+           passphrase: $wifiIntPass
+           admin-mac: $(/interface/ethernet get [find name=eth1] mac-address)
+
+       Resolved respectively to ``$wifiIntPass`` (var ref) and
+       ``[/interface/ethernet get [find name=eth1] mac-address]``
+       (bracket expression).
+
+    2. **Mapping form** -- explicit, kept as an escape hatch for values
+       that the sigil regex would refuse (e.g. names with non-identifier
+       chars, or expressions whose textual content already starts with
+       ``$``)::
+
+           passphrase: { var: wifiIntPass }
+           admin-mac:  { expr: '/interface/ethernet get ...' }
+
+    3. **Plain scalar** -- everything else; goes through :func:`_quote`.
     """
+    # Sigil short forms (only on plain strings, before quoting).
+    if isinstance(value, str):
+        m = _VAR_SIGIL_RE.match(value)
+        if m:
+            return f"${m.group(1)}"
+        m = _EXPR_SIGIL_RE.match(value)
+        if m:
+            return f"[{m.group(1)}]"
+
     if isinstance(value, dict):
         if "var" in value:
             name = value["var"]

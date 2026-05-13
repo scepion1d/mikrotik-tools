@@ -239,6 +239,97 @@ def test_id_pad_zero_or_negative_rejected() -> None:
         """))
 
 
+def test_operation_defaults_to_add() -> None:
+    """Items without an explicit `operation` key default to `add`.
+
+    Almost every fresh row uses `add`; the `set` rows already need
+    `filter:` so they self-disambiguate. Letting `add` be implicit
+    cuts boilerplate everywhere.
+    """
+    out = to_rsc(textwrap.dedent("""\
+        interface:
+          list:
+            - id: iac.list.wan
+              comment: WAN uplink
+              name: iac.list.wan
+    """))
+    assert 'add comment="iac.list.wan -- WAN uplink" name=iac.list.wan' in out
+
+
+def test_explicit_operation_still_honoured_for_set() -> None:
+    """`set` still requires the explicit `operation: set` (otherwise we'd
+    have no way to express it -- the default-to-add only kicks in when the
+    key is absent)."""
+    out = to_rsc(textwrap.dedent("""\
+        user:
+          - operation: set
+            filter: name=admin
+            password: x
+    """))
+    assert "set [find name=admin] password=x" in out
+
+
+def test_var_sigil_renders_as_dollar_name() -> None:
+    """`$NAME` shorthand resolves the same way as `{var: NAME}`."""
+    out = to_rsc(textwrap.dedent("""\
+        interface:
+          wifi:
+            security:
+              - id: iac.wifi.sec.lan
+                name: iac.wifi.sec.lan
+                passphrase: $wifiIntPass
+    """))
+    assert "passphrase=$wifiIntPass" in out
+    assert "{" not in out  # no leaked braces
+
+
+def test_var_sigil_only_accepts_identifier_names() -> None:
+    """A value like ``$ foo`` (with space) or ``$1abc`` (digit-leading) is
+    NOT a sigil; it goes through the normal quoter so the literal value
+    is preserved."""
+    # Leading digit -> not an identifier -> quoted as a normal string.
+    # The leading $ then forces RouterOS quoting via _NEEDS_QUOTE_RE.
+    out = to_rsc(textwrap.dedent("""\
+        interface:
+          list:
+            - id: iac.list.wan
+              comment: WAN uplink
+              name: $1bad
+    """))
+    assert 'name="$1bad"' in out
+
+
+def test_expr_sigil_renders_with_brackets() -> None:
+    """`$(...)` shorthand resolves the same way as `{expr: ...}`."""
+    out = to_rsc(textwrap.dedent("""\
+        interface:
+          bridge:
+            _items:
+              - id: iac.bridge.lan
+                name: iac.bridge.lan
+                admin-mac: $(/interface/ethernet get [find name=iac.ether.lan1] mac-address)
+    """))
+    assert (
+        "admin-mac=[/interface/ethernet get [find name=iac.ether.lan1] mac-address]"
+        in out
+    )
+    # Bracket expression must NOT be quoted.
+    assert 'admin-mac="[' not in out
+
+
+def test_inline_flow_form_works() -> None:
+    """Pure YAML: a row written as a flow mapping renders identically to
+    the block form. Useful for short rows like interface lists."""
+    out = to_rsc(textwrap.dedent("""\
+        interface:
+          list:
+            - {id: iac.list.wan, name: iac.list.wan, comment: WAN uplink}
+            - {id: iac.list.lan, name: iac.list.lan, comment: LAN}
+    """))
+    assert 'add comment="iac.list.wan -- WAN uplink" name=iac.list.wan' in out
+    assert 'add comment="iac.list.lan -- LAN" name=iac.list.lan' in out
+
+
 def test_comment_only_rendered_alone() -> None:
     """When only `comment` is present, the rendered comment is just the text."""
     out = to_rsc(textwrap.dedent("""\
@@ -344,15 +435,6 @@ def test_malformed_yaml_raises_yamlerror() -> None:
         to_rsc("interface:\n  list:\n  - bad: indent\n   nope")
 
 
-def test_missing_operation_raises() -> None:
-    with pytest.raises(YamlError, match="missing `operation`"):
-        to_rsc(textwrap.dedent("""\
-            interface:
-              list:
-                - name: iac.list.wan
-        """))
-
-
 def test_unknown_value_mapping_raises() -> None:
     with pytest.raises(YamlError, match="must have `var` or `expr`"):
         to_rsc(textwrap.dedent("""\
@@ -371,7 +453,8 @@ def test_top_level_must_be_mapping() -> None:
 
 def test_to_rsc_file_reports_path_in_error(tmp_path: Path) -> None:
     bad = tmp_path / "broken.yaml"
-    bad.write_text("interface:\n  list:\n    - {}\n", encoding="utf-8")
+    # An item whose value is a string (not a mapping) trips the renderer.
+    bad.write_text("interface:\n  list:\n    - oops-not-a-mapping\n", encoding="utf-8")
     with pytest.raises(YamlError) as exc:
         to_rsc_file(bad)
     assert "broken.yaml" in str(exc.value)

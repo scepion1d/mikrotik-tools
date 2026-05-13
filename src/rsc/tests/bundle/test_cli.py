@@ -321,8 +321,9 @@ def test_yaml_mode_malformed_yaml_returns_2(
     """A YamlError from the converter surfaces as exit 2 with the file path."""
     profile = tmp_path / "broken"
     profile.mkdir()
+    # An item value-mapping with neither `var` nor `expr` is rejected.
     (profile / "10-bad.yaml").write_text(
-        "interface:\n  list:\n    - name: oops-no-operation\n",
+        "interface:\n  list:\n    - id: iac.list.wan\n      name:\n        bogus: x\n",
         encoding="utf-8",
     )
     rc = bundle_main([
@@ -333,4 +334,4 @@ def test_yaml_mode_malformed_yaml_returns_2(
     assert rc == 2
     err = capsys.readouterr().err
     assert "10-bad.yaml" in err
-    assert "operation" in err
+    assert "var" in err  # error mentions the missing var/expr key
