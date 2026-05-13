@@ -12,7 +12,14 @@ from rsc.parser import Config, Item, parse_text  # noqa: E402
 from rsc.bundle import bundle  # noqa: E402
 from rsc.bundle.compact import emit  # noqa: E402
 
-FIX = Path(__file__).resolve().parent / "fixtures" / "profile"
+FIX_ROOT = Path(__file__).resolve().parent / "fixtures"
+FIX = FIX_ROOT / "profile"
+VARS = FIX_ROOT  # fixtures/ holds secrets.rsc + vars.rsc
+
+
+def _bundle(**kw: object) -> str:
+    """Bundle the profile fixture with the standard vars folder."""
+    return bundle(str(FIX), vars_dir=VARS, **kw)  # type: ignore[arg-type]
 
 
 # --- compact.emit unit tests ------------------------------------------------
@@ -160,7 +167,7 @@ def test_emit_skips_empty_menu() -> None:
 
 
 def test_bundle_substitutes_vars_and_preserves_comments() -> None:
-    out = bundle(str(FIX))
+    out = _bundle()
     # Variable substitution: $adminCidrs -> "192.168.10.2,192.168.10.3"
     # The comma-separated value has no whitespace, so it stays bare.
     assert "address=192.168.10.2,192.168.10.3" in out
@@ -182,7 +189,7 @@ def test_bundle_substitutes_vars_and_preserves_comments() -> None:
 def test_bundle_preserves_identity_for_diffability() -> None:
     """Bundle output must round-trip through parse_text + give every item
     an identity_key the differ can use."""
-    out = bundle(str(FIX))
+    out = _bundle()
     cfg = parse_text(out)
 
     # /interface/list -> name= identity
@@ -196,7 +203,7 @@ def test_bundle_preserves_identity_for_diffability() -> None:
 
 
 def test_bundle_no_flatten_keeps_globals() -> None:
-    out = bundle(str(FIX), flatten_output=False)
+    out = _bundle(flatten_output=False)
     # Raw concat: :global lines and $var refs survive untouched.
     assert ':global adminPass    "secret-pw"' in out
     assert "$adminCidrs" in out
@@ -207,8 +214,8 @@ def test_bundle_no_flatten_keeps_globals() -> None:
 def test_bundle_output_smaller_than_source() -> None:
     """Compact output should be materially smaller than the raw concat
     (banners + scripting glue + line wrapping all gone)."""
-    raw = bundle(str(FIX), flatten_output=False)
-    minimized = bundle(str(FIX))
+    raw = _bundle(flatten_output=False)
+    minimized = _bundle()
     assert len(minimized) < len(raw)
     # No backslash continuations in the minimized form.
     assert "\\\n" not in minimized

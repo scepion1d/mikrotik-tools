@@ -8,13 +8,15 @@ folder = one apply-able config.
 
 Usage::
 
-    rsc.bundle --profile <folder> [-o OUT] [--no-flatten]
+    rsc.bundle --profile <folder> [--vars <folder>] [-o OUT] [--no-flatten]
 
 Pipeline (defaults)
 -------------------
-1. :func:`rsc.bundle.loader.load_profile` -- enumerate ``*.rsc`` in the
-   profile folder, load ``secrets.rsc`` + ``vars.rsc`` first so their
-   ``:global`` assignments are visible to all later modules.
+1. :func:`rsc.bundle.loader.load_profile` -- load every ``*.rsc`` at
+   the top level of the ``--vars`` folder (when present), then every
+   ``*.rsc`` at the top level of the profile folder. Both groups are
+   sorted case-insensitively. Vars come first so their ``:global``
+   assignments are visible to every later module.
 2. :func:`rsc.bundle.flatten.flatten` -- substitute every ``$var`` reference
    with its literal value, strip RouterOS scripting wrappers, normalise
    property quoting.
@@ -31,6 +33,17 @@ Output path
 - ``-o <file>``  (extension makes it a file path)
 - ``-o <dir>``   write to ``<dir>/<profile>-<yymmdd>-<secs>.rsc``
 - omitted        write to ``./out/<profile>-<yymmdd>-<secs>.rsc``
+
+Vars discovery
+--------------
+- ``--vars <folder>``  explicit path to a folder of ``:global`` ``.rsc``
+  files. All ``*.rsc`` at the top level are loaded (alphabetically) and
+  prepended to the bundle.
+- omitted              defaults to ``<profile-parent>``. The convention
+  in this repo is that ``rsc/<profile>/`` is bundled with ``rsc/`` as
+  the vars folder, picking up ``rsc/secrets.rsc`` + ``rsc/vars.rsc``.
+  If the parent contains no ``*.rsc`` at the top level, no vars are
+  loaded (the profile still bundles, just without ``:global`` substitution).
 
 Escape hatches
 --------------
@@ -70,8 +83,20 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "profile folder containing the .rsc modules (a named router "
             "configuration variant, e.g. rsc/basic or rsc/segmented). "
-            "Loaded order: secrets.rsc, vars.rsc, then every other *.rsc "
-            "alphabetically."
+            "Loaded order: every *.rsc in --vars, then every *.rsc in "
+            "the profile folder, both alphabetically."
+        ),
+    )
+    parser.add_argument(
+        "--vars",
+        type=Path,
+        default=None,
+        help=(
+            "folder of :global .rsc files to load before the profile "
+            "modules. Every *.rsc at the top level (alphabetical) is "
+            "included. When omitted, defaults to <profile-parent>; "
+            "if that folder has no *.rsc at the top level, no vars "
+            "are loaded."
         ),
     )
     parser.add_argument(
@@ -102,8 +127,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"rsc bundle: profile folder not found: {profile}", file=sys.stderr)
         return 2
 
+    vars_dir = _resolve_vars_dir(args.vars, profile)
+
     try:
-        files = load_profile(profile)
+        files = load_profile(profile, vars_dir=vars_dir)
     except LoaderError as exc:
         print(f"rsc bundle: {exc}", file=sys.stderr)
         return 2
@@ -135,6 +162,22 @@ def main(argv: list[str] | None = None) -> int:
     out_path.write_text(text, encoding="utf-8")
     print(out_path)
     return 0
+
+
+def _resolve_vars_dir(explicit: Path | None, profile: Path) -> Path | None:
+    """Pick the vars folder to load.
+
+    Rules
+    -----
+    - ``explicit is None``  -> use ``<profile-parent>`` if it is a
+                               directory, else None (skip).
+    - otherwise             -> use *explicit* verbatim; missing
+                               directories are caught by the loader.
+    """
+    if explicit is None:
+        candidate = profile.parent
+        return candidate if candidate.is_dir() else None
+    return explicit
 
 
 def _resolve_out_path(out: Path | None, profile: Path) -> Path:

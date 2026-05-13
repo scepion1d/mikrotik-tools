@@ -4,7 +4,7 @@ Python toolkit for RouterOS `.rsc` script processing. One CLI with two
 subcommands plus a shared parser library.
 
 ```text
-rsc bundle <profile-folder> [...]    # merge profile -> single minimal .rsc
+rsc bundle --profile <folder> [...]  # merge profile -> single minimal .rsc
 rsc diff   --old A.rsc --new B.rsc   # diff two configs into a runnable patch
 ```
 
@@ -20,17 +20,23 @@ Python ≥ 3.10.
 
 ### `rsc bundle`
 
-Merge a flat profile folder (`secrets.rsc`, `vars.rsc`, `NN-*.rsc`) into
-one minimal `/export`-style `.rsc`. Resolves `:global` variable
-substitution and strips RouterOS scripting wrappers.
+Merge a flat profile folder (`NN-*.rsc`) plus a vars folder of
+`:global` `.rsc` files into one minimal `/export`-style `.rsc`.
+Resolves `:global` variable substitution and strips RouterOS scripting
+wrappers.
 
 ```powershell
-rsc bundle rsc\segmented                       # -> .\out\segmented-YYMMDD-XXXXX.rsc
-rsc bundle rsc\segmented -o builds\            # -> builds\segmented-YYMMDD-XXXXX.rsc
-rsc bundle rsc\segmented -o my-bundle.rsc      # -> my-bundle.rsc
-rsc bundle rsc\segmented --keep-comments
-rsc bundle rsc\segmented --no-flatten          # raw concat, skip flatten/parse pipeline
+rsc bundle --profile rsc\segmented                       # vars dir auto-discovered (= rsc\)
+rsc bundle --profile rsc\segmented -o builds\            # auto-named under builds\
+rsc bundle --profile rsc\segmented -o my-bundle.rsc      # explicit file path
+rsc bundle --profile rsc\segmented --vars rsc\           # explicit vars folder
+rsc bundle --profile rsc\segmented --no-flatten          # raw concat, skip flatten/parse pipeline
 ```
+
+`--vars` defaults to `<profile-parent>`. Every `*.rsc` at the top
+level of that folder is loaded alphabetically and prepended to the
+bundle. If the folder is empty (or has no `*.rsc`), the profile still
+bundles -- just without any `:global` substitution.
 
 ### `rsc diff`
 
@@ -66,7 +72,7 @@ ops = diff(parse_file("a.rsc"), parse_file("b.rsc"))
 print(emit(ops))
 
 # Bundle
-text = bundle("rsc/segmented")  # default pipeline: load + flatten + compact
+text = bundle("rsc/segmented", vars_dir="rsc/")
 ```
 
 ## Architecture

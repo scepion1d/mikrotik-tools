@@ -56,8 +56,9 @@ End-to-end pipeline:
 
 ```powershell
 # 1. bundle a profile -> single self-contained .rsc
-.\bin\rsc.cmd bundle ..\rsc\segmented -o ..\out
-# -> ..\out\segmented-YYMMDD-XXXXX.rsc
+#    Globals at <profile-parent>/{secrets,vars}.rsc are auto-discovered.
+.\bin\rsc.cmd bundle --profile ..\rsc\segmentedx3 -o ..\out
+# -> ..\out\segmentedx3-YYMMDD-XXXXX.rsc
 
 # 2. capture live router state
 .\bin\mtctl.cmd backup --no-encrypt
@@ -65,7 +66,7 @@ End-to-end pipeline:
 .\bin\mtctl.cmd download --src backups/<timestamp>/live.rsc --dst ..\out\live.rsc
 
 # 3. emit + verify both patches in one go
-$candidate = (Get-ChildItem ..\out\segmented-*.rsc | Sort Name | Select -Last 1).FullName
+$candidate = (Get-ChildItem ..\out\segmentedx3-*.rsc | Sort Name | Select -Last 1).FullName
 .\bin\rsc.cmd diff --old ..\out\live.rsc --new $candidate `
     --rollforward ..\out\rollforward.rsc `
     --rollback   ..\out\rollback.rsc `

@@ -2,12 +2,13 @@
 
 Drives :func:`rsc.bundle.cli.main` directly with arg lists and verifies
 output paths, exit codes, and the two output modes (default pipeline and
-``--no-flatten``).
+``--no-flatten``). Also covers ``--vars`` discovery.
 """
 
 from __future__ import annotations
 
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -18,6 +19,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from rsc.bundle.cli import main as bundle_main  # noqa: E402
 
 FIX = Path(__file__).resolve().parent / "fixtures"
+PROFILE = FIX / "profile"
+VARS = FIX  # fixtures/ holds secrets.rsc + vars.rsc
+
+
+def _base_args(out: Path | None = None) -> list[str]:
+    """Standard arg list: profile + explicit vars folder (+ optional -o)."""
+    args = ["--profile", str(PROFILE), "--vars", str(VARS)]
+    if out is not None:
+        args += ["-o", str(out)]
+    return args
 
 
 # --- successful runs --------------------------------------------------------
@@ -25,11 +36,11 @@ FIX = Path(__file__).resolve().parent / "fixtures"
 
 def test_writes_to_explicit_file_path(tmp_path: Path) -> None:
     out = tmp_path / "bundle.rsc"
-    rc = bundle_main(["--profile", str(FIX / "profile"), "-o", str(out)])
+    rc = bundle_main(_base_args(out))
     assert rc == 0
     assert out.is_file()
     text = out.read_text(encoding="utf-8")
-    # Default pipeline ran: secrets/vars resolved, no `:global` lines left.
+    # Default pipeline ran: vars resolved, no `:global` lines left.
     assert ":global" not in text
     # Some recognisable content from the profile fixture survived.
     assert "/interface/list" in text or "/system/identity" in text
@@ -39,7 +50,7 @@ def test_writes_to_existing_directory_with_auto_name(tmp_path: Path) -> None:
     """``-o <existing-dir>`` -> ``<dir>/<profile>-<yymmdd>-<secs>.rsc``."""
     out_dir = tmp_path / "builds"
     out_dir.mkdir()
-    rc = bundle_main(["--profile", str(FIX / "profile"), "-o", str(out_dir)])
+    rc = bundle_main(_base_args(out_dir))
     assert rc == 0
     files = list(out_dir.glob("profile-*.rsc"))
     assert len(files) == 1, list(out_dir.iterdir())
@@ -49,7 +60,7 @@ def test_writes_to_existing_directory_with_auto_name(tmp_path: Path) -> None:
 def test_bare_name_treated_as_directory(tmp_path: Path) -> None:
     """``-o builds`` with no existing file -> create dir, auto-name inside."""
     out_dir = tmp_path / "newdir"
-    rc = bundle_main(["--profile", str(FIX / "profile"), "-o", str(out_dir)])
+    rc = bundle_main(_base_args(out_dir))
     assert rc == 0
     assert out_dir.is_dir()
     assert any(out_dir.glob("profile-*.rsc"))
@@ -60,7 +71,7 @@ def test_default_out_is_dot_out_under_cwd(
 ) -> None:
     """No ``-o`` -> ``./out/<profile>-<stamp>.rsc`` under cwd."""
     monkeypatch.chdir(tmp_path)
-    rc = bundle_main(["--profile", str(FIX / "profile")])
+    rc = bundle_main(_base_args())
     assert rc == 0
     out_dir = tmp_path / "out"
     assert out_dir.is_dir()
@@ -69,11 +80,7 @@ def test_default_out_is_dot_out_under_cwd(
 
 def test_no_flatten_keeps_globals_and_banners(tmp_path: Path) -> None:
     out = tmp_path / "raw.rsc"
-    rc = bundle_main([
-        "--profile", str(FIX / "profile"),
-        "-o", str(out),
-        "--no-flatten",
-    ])
+    rc = bundle_main(_base_args(out) + ["--no-flatten"])
     assert rc == 0
     text = out.read_text(encoding="utf-8")
     # Raw concat keeps :global lines (no flatten pass) and per-file banners.
@@ -84,7 +91,7 @@ def test_no_flatten_keeps_globals_and_banners(tmp_path: Path) -> None:
 def test_short_o_flag_alias(tmp_path: Path) -> None:
     """``-o`` is the short alias for ``--out``."""
     out = tmp_path / "bundle.rsc"
-    rc = bundle_main(["--profile", str(FIX / "profile"), "-o", str(out)])
+    rc = bundle_main(_base_args(out))
     assert rc == 0
     assert out.is_file()
 
@@ -94,10 +101,93 @@ def test_prints_output_path_on_stdout(
 ) -> None:
     """The CLI prints the resolved output path so chained scripts can capture it."""
     out = tmp_path / "bundle.rsc"
-    bundle_main(["--profile", str(FIX / "profile"), "-o", str(out)])
+    bundle_main(_base_args(out))
     printed = capsys.readouterr().out.strip()
     # Compare via Path so backslash/forward-slash differences don't matter.
     assert Path(printed) == out
+
+
+# --- vars discovery ---------------------------------------------------------
+
+
+def test_default_vars_dir_is_profile_parent(tmp_path: Path) -> None:
+    """When --vars is omitted, every *.rsc in <profile-parent> loads.
+
+    Mirrors the production layout: rsc/{secrets,vars}.rsc + rsc/<profile>/.
+    """
+    repo = tmp_path / "repo"
+    profile = repo / "myprofile"
+    profile.mkdir(parents=True)
+    shutil.copy(VARS / "secrets.rsc", repo / "secrets.rsc")
+    shutil.copy(VARS / "vars.rsc", repo / "vars.rsc")
+    for src in PROFILE.iterdir():
+        shutil.copy(src, profile / src.name)
+
+    out = tmp_path / "bundle.rsc"
+    rc = bundle_main(["--profile", str(profile), "-o", str(out)])
+    assert rc == 0
+    text = out.read_text(encoding="utf-8")
+    # Variables resolved -> the fixture's $routerName / $adminPass landed.
+    assert "set name=TestRouter" in text
+    assert "password=secret-pw" in text
+
+
+def test_default_vars_dir_with_no_globals_still_bundles(tmp_path: Path) -> None:
+    """If <profile-parent> has no *.rsc, the bundle still produces output
+    (just without any :global substitution)."""
+    repo = tmp_path / "repo"
+    profile = repo / "myprofile"
+    profile.mkdir(parents=True)
+    # Profile module that doesn't reference any $vars.
+    (profile / "10-clock.rsc").write_text(
+        "/system/clock\n    set time-zone-name=UTC\n",
+    )
+
+    out = tmp_path / "bundle.rsc"
+    rc = bundle_main(["--profile", str(profile), "-o", str(out)])
+    assert rc == 0
+    assert "time-zone-name=UTC" in out.read_text(encoding="utf-8")
+
+
+def test_explicit_vars_dir_overrides_default(tmp_path: Path) -> None:
+    """``--vars`` wins over the parent-dir default."""
+    repo = tmp_path / "repo"
+    profile = repo / "myprofile"
+    profile.mkdir(parents=True)
+    # Parent has a vars file we should NOT load.
+    (repo / "vars.rsc").write_text(':global routerName "WrongName"\n')
+    (profile / "10-id.rsc").write_text(
+        ":global routerName\n/system/identity\n    set name=$routerName\n",
+    )
+
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "vars.rsc").write_text(':global routerName "RightName"\n')
+
+    out = tmp_path / "bundle.rsc"
+    rc = bundle_main([
+        "--profile", str(profile),
+        "--vars", str(elsewhere),
+        "-o", str(out),
+    ])
+    assert rc == 0
+    text = out.read_text(encoding="utf-8")
+    assert "set name=RightName" in text
+    assert "WrongName" not in text
+
+
+def test_missing_explicit_vars_dir_returns_2(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A bogus --vars path is reported by the loader as exit 2."""
+    rc = bundle_main([
+        "--profile", str(PROFILE),
+        "--vars", str(tmp_path / "no-such-vars"),
+        "-o", str(tmp_path / "out.rsc"),
+    ])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "vars folder not found" in err
 
 
 # --- failure paths ----------------------------------------------------------

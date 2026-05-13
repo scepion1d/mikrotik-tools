@@ -1,9 +1,11 @@
 """rsc.bundle -- bundle a flat RouterOS .rsc profile folder into one minimal file.
 
-Walks a profile folder (``rsc/<profile>/{secrets.rsc, vars.rsc, NN-*.rsc}``),
-resolves ``:global`` variable assignments into property values, strips
-RouterOS scripting wrappers (``:if`` / ``:foreach`` / ``$helper`` calls),
-and emits a minimal ``/export``-style ``.rsc`` with one operation per line.
+Walks a profile folder (``rsc/<profile>/NN-*.rsc``) plus an optional
+**vars folder** of ``:global`` files (``rsc/`` by convention, holding
+``secrets.rsc`` + ``vars.rsc``), resolves ``:global`` variable
+assignments into property values, strips RouterOS scripting wrappers
+(``:if`` / ``:foreach`` / ``$helper`` calls), and emits a minimal
+``/export``-style ``.rsc`` with one operation per line.
 
 A *profile* is a complete, named router configuration variant for the
 same physical device (e.g. ``basic`` = single LAN; ``segmented`` = LAN
@@ -13,11 +15,11 @@ CLI
 ---
 ::
 
-    rsc.bundle rsc/segmented                   # -> ./out/segmented-YYMMDD-XXXXX.rsc
-    rsc.bundle rsc/segmented -o builds/        # -> builds/segmented-YYMMDD-XXXXX.rsc
-    rsc.bundle rsc/segmented -o my-bundle.rsc  # -> my-bundle.rsc
-    rsc.bundle rsc/segmented --keep-comments
-    rsc.bundle rsc/segmented --no-flatten
+    rsc.bundle --profile rsc/segmented                   # vars dir auto-discovered
+    rsc.bundle --profile rsc/segmented -o builds/        # auto-named under builds/
+    rsc.bundle --profile rsc/segmented -o my-bundle.rsc  # explicit file path
+    rsc.bundle --profile rsc/segmented --vars rsc/        # explicit vars dir
+    rsc.bundle --profile rsc/segmented --no-flatten
 
 Library
 -------
@@ -25,7 +27,7 @@ Library
 
     from rsc.bundle import bundle
 
-    text = bundle("rsc/segmented")  # default pipeline
+    text = bundle("rsc/segmented", vars_dir="rsc/")
     text = bundle("rsc/segmented", flatten_output=False)  # raw concat
 
 The legacy import-inlining API (:func:`bundle_file`, :func:`bundle_inline`,
@@ -44,6 +46,10 @@ Public API
 - :class:`BundleError`   -- legacy: raised on missing import / cycle
 """
 
+from __future__ import annotations
+
+from pathlib import Path
+
 from rsc.parser import parse_text
 
 from .bundler import BundleError, bundle_inline, bundle_file
@@ -51,23 +57,29 @@ from .compact import emit as _compact_emit
 from .flatten import flatten
 from .loader import LoaderError, concat, load_profile
 
-__version__ = "0.2.0"
+__version__ = "0.4.0"
 
 
 def bundle(
-    profile_dir: str,
+    profile_dir: str | Path,
     *,
+    vars_dir: str | Path | None = None,
     flatten_output: bool = True,
 ) -> str:
     """Bundle a flat profile folder into a deploy-ready ``.rsc`` string.
 
     Args:
         profile_dir: path to the profile folder (e.g. ``rsc/segmented``).
+        vars_dir: optional folder of ``:global`` ``.rsc`` files to load
+            before the profile modules. Every ``*.rsc`` at the top level
+            (alphabetical) is included. Pass ``None`` (default) to skip.
+            The convention is to point this at the shared
+            ``<profile-parent>`` folder (e.g. ``rsc/``).
         flatten_output: when True (default), substitute ``:global`` vars,
             strip scripting wrappers, parse + re-emit one-line-per-op.
             When False, return the raw concatenated source.
     """
-    files = load_profile(profile_dir)
+    files = load_profile(profile_dir, vars_dir=vars_dir)
     text = concat(files)
     if not flatten_output:
         return text

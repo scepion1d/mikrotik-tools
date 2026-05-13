@@ -1,29 +1,37 @@
 """Profile-folder loader.
 
-Walks a flat profile directory of authored ``.rsc`` files and returns
-them in the order the bundler should concatenate them. Layout convention
-(set in phase 2 of the refactor)::
+Walks a flat profile directory of authored ``.rsc`` modules and returns
+them in the order the bundler should concatenate them. Layout convention::
 
-    rsc/<profile>/
-        secrets.rsc      # :global secret values
-        vars.rsc         # :global non-secret values
-        10-interfaces.rsc
-        20-wifi.rsc
-        30-ip.rsc
-        40-firewall.rsc
-        50-services.rsc
-        60-system.rsc
+    rsc/
+        secrets.rsc      # :global secret values   (shared across profiles)
+        vars.rsc         # :global non-secret values (shared across profiles)
+        <profile>/
+            10-interfaces.rsc
+            20-wifi.rsc
+            30-ip.rsc
+            40-firewall.rsc
+            50-services.rsc
+            60-system.rsc
 
 A *profile* is a complete, named router configuration variant for the
 same physical device (e.g. ``basic`` = single LAN; ``segmented`` = LAN
 + IoT VLAN). One profile folder = one apply-able config.
 
-Load order is ``secrets.rsc`` -> ``vars.rsc`` -> every other ``.rsc`` in
-**alphabetical** filename order. Putting secrets/vars first matters
-because :func:`rsc.bundle.flatten.flatten` collects ``:global NAME
-"value"`` assignments on a first pass and substitutes them throughout the
-text on a second pass -- so the values must appear textually before any
-module that references ``$NAME``.
+Globals (``:global`` definitions) live in a separate **vars folder**
+that is passed explicitly to :func:`load_profile` as a directory path.
+Every ``*.rsc`` at the top level of that folder is loaded, in
+case-insensitive alphabetical order, before the profile's own modules.
+This lets every profile share one set of ``:global`` files from a
+central location while keeping per-profile folders limited to numbered
+modules.
+
+Load order is: every ``*.rsc`` at the top level of *vars_dir* (alpha,
+case-insensitive) -> every ``*.rsc`` at the top level of *profile_dir*
+(same sort). Vars come first because :func:`rsc.bundle.flatten.flatten`
+collects ``:global NAME "value"`` assignments on a first pass and
+substitutes them throughout the text on a second pass -- so the values
+must appear textually before any module that references ``$NAME``.
 
 The numeric ``NN-`` filename prefix is the operator-controlled ordering
 hook: keep dependencies pointing back at lower-numbered modules.
@@ -34,55 +42,68 @@ from __future__ import annotations
 from pathlib import Path
 
 
-# Filenames that must be loaded before any other module so that
-# ``:global NAME "value"`` assignments are seen before ``$NAME`` is
-# referenced anywhere downstream. Order within this list is the load
-# order used.
-_GLOBAL_FILES: tuple[str, ...] = ("secrets.rsc", "vars.rsc")
-
-
 class LoaderError(Exception):
     """Raised when a profile folder is missing required files or is malformed."""
 
 
-def load_profile(profile_dir: str | Path) -> list[Path]:
+def load_profile(
+    profile_dir: str | Path,
+    *,
+    vars_dir: str | Path | None = None,
+) -> list[Path]:
     """Return the ordered list of ``.rsc`` files to bundle for *profile_dir*.
 
-    Order is: ``secrets.rsc``, ``vars.rsc``, then every other ``*.rsc``
-    file at the top level of *profile_dir* in alphabetical
-    (case-insensitive) order. Subdirectories are NOT traversed -- the
-    layout is intentionally flat (see module docstring).
+    Order is: every ``*.rsc`` at the top level of *vars_dir* (when
+    given), then every ``*.rsc`` at the top level of *profile_dir* --
+    both groups sorted case-insensitively by filename. Subdirectories
+    are NOT traversed in either folder; the layout is intentionally flat
+    (see module docstring).
+
+    *vars_dir* is optional but, when supplied, must point at an existing
+    directory. It lives outside *profile_dir* (one shared folder under
+    ``rsc/`` is the convention) and is passed explicitly so the same
+    profile folder can be bundled against different variable sets
+    without renaming files.
+
+    An empty *vars_dir* (no ``*.rsc`` at the top level) is allowed and
+    silently contributes nothing.
 
     Raises
     ------
     LoaderError
-        If *profile_dir* is not a directory, or contains no ``.rsc`` files.
+        If *profile_dir* is not a directory, contains no ``.rsc`` files,
+        or if *vars_dir* is supplied but does not point at a directory.
     """
     root = Path(profile_dir)
     if not root.is_dir():
         raise LoaderError(f"profile folder not found: {root}")
 
-    # Top-level *.rsc only; case-insensitive alphabetical sort so the same
-    # order is produced on Windows (NTFS) and Linux. We rely on filename,
-    # not stat order, so the result is reproducible across runs.
-    all_rsc = sorted(
-        (p for p in root.iterdir() if p.is_file() and p.suffix.lower() == ".rsc"),
-        key=lambda p: p.name.lower(),
-    )
-    if not all_rsc:
+    modules = _list_rsc(root)
+    if not modules:
         raise LoaderError(f"no .rsc files in profile folder: {root}")
 
-    by_name = {p.name: p for p in all_rsc}
-
     ordered: list[Path] = []
-    for name in _GLOBAL_FILES:
-        if name in by_name:
-            ordered.append(by_name.pop(name))
-    # Everything else, in the alphabetical order from above (minus the
-    # ones we just consumed). by_name preserves insertion order from
-    # the sorted iteration -- so this is still deterministic.
-    ordered.extend(by_name.values())
+    if vars_dir is not None:
+        vroot = Path(vars_dir)
+        if not vroot.is_dir():
+            raise LoaderError(f"vars folder not found: {vroot}")
+        ordered.extend(_list_rsc(vroot))
+
+    ordered.extend(modules)
     return ordered
+
+
+def _list_rsc(folder: Path) -> list[Path]:
+    """Top-level ``*.rsc`` files in *folder*, alpha-sorted (case-insensitive).
+
+    Case-insensitive sort so the same order is produced on Windows
+    (NTFS) and Linux. Subdirectories are skipped; we rely on filename,
+    not stat order, so the result is reproducible across runs.
+    """
+    return sorted(
+        (p for p in folder.iterdir() if p.is_file() and p.suffix.lower() == ".rsc"),
+        key=lambda p: p.name.lower(),
+    )
 
 
 def concat(files: list[Path]) -> str:
