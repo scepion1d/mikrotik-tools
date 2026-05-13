@@ -20,9 +20,12 @@ classifiers = [
     "Topic :: System :: Systems Administration",
     "Typing :: Typed",
 ]
-# No external runtime deps -- the parser, bundle, and diff subpackages
-# all live in this same package.
-dependencies = []
+# Runtime deps:
+#   pyyaml -- used by `rsc.yaml` to parse the YAML profile sources behind
+#   the `rsc bundle --yaml` opt-in. Parser + diff still have zero deps.
+dependencies = [
+    "pyyaml>=6.0",
+]
 
 [dependency-groups]
 # Installed by `uv sync` (default group). Excluded from a `--no-dev` build.
@@ -54,3 +57,4 @@ rsc = ["py.typed"]
 "rsc.parser" = ["py.typed"]
 "rsc.bundle" = ["py.typed"]
 "rsc.diff" = ["py.typed"]
+"rsc.yaml" = ["py.typed"]

@@ -1,0 +1,5 @@
+globals:
+  - name: adminCidrs
+    value: 192.168.10.2,192.168.10.3
+  - name: routerName
+    value: TestRouter

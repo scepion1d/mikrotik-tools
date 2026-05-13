@@ -1,0 +1,12 @@
+system:
+  identity:
+    - operation: set
+      name:
+        var: routerName
+
+user:
+  - operation: set
+    filter: name=admin
+    comment: Default admin
+    password:
+      var: adminPass

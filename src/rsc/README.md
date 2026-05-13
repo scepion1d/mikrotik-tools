@@ -4,14 +4,19 @@ Python toolkit for RouterOS `.rsc` script processing. One CLI with two
 subcommands plus a shared parser library.
 
 ```text
-rsc bundle --profile <folder> [...]  # merge profile -> single minimal .rsc
-rsc diff   --old A.rsc --new B.rsc   # diff two configs into a runnable patch
+rsc bundle --profile <folder> [--yaml] [...]  # merge profile -> single minimal .rsc
+rsc diff   --old A.rsc --new B.rsc            # diff two configs into a runnable patch
 ```
+
+The optional `--yaml` flag treats the profile + vars folders as YAML
+sources (`*.yaml`) and renders them to `.rsc` text via the
+[`rsc.yaml`](rsc/yaml/) subpackage before the normal bundle pipeline
+runs. The output is the same `.rsc` either way.
 
 ## Install
 
 ```powershell
-.\build.ps1            # uv sync (zero external runtime deps)
+.\build.ps1            # uv sync (pyyaml is the only runtime dep)
 ```
 
 Python ≥ 3.10.
@@ -31,14 +36,21 @@ rsc bundle --profile rsc\segmented -o builds\            # auto-named under buil
 rsc bundle --profile rsc\segmented -o my-bundle.rsc      # explicit file path
 rsc bundle --profile rsc\segmented --vars rsc\           # explicit vars folder
 rsc bundle --profile rsc\segmented --no-flatten          # raw concat, skip flatten/parse pipeline
+rsc bundle --profile src\segmented --yaml                # YAML sources (.yaml) under src\
 ```
 
-`--vars` defaults to `<profile-parent>`. Every `*.rsc` at the top
-level of that folder is loaded alphabetically and prepended to the
-bundle. If the folder is empty (or has no `*.rsc`), the profile still
-bundles -- just without any `:global` substitution.
+`--vars` defaults to `<profile-parent>`. Every `*.rsc` (or, with
+`--yaml`, `*.yaml`) at the top level of that folder is loaded
+alphabetically and prepended to the bundle. If the folder is empty
+(or has no matching files), the profile still bundles -- just without
+any `:global` substitution.
 
-### `rsc diff`
+`--yaml` switches loader mode: the profile and vars folders are
+globbed for `*.yaml`, each file is rendered to `.rsc` text via
+[`rsc.yaml`](rsc/yaml/), and the rendered text feeds the same
+flatten + parse + compact pipeline as the `.rsc` path. The output is
+byte-equivalent to the `.rsc` mode for a correctly authored YAML
+profile (verifiable with `rsc diff --check`).
 
 Diff two `.rsc` configs into a minimal patch (`add` / `set` / `reset` /
 `remove` ops). Two modes:
@@ -63,6 +75,7 @@ disables the per-menu defaults table entirely.
 from rsc import parse_file, diff
 from rsc.diff import emit
 from rsc.bundle import bundle
+from rsc.yaml import to_rsc, to_rsc_file
 
 # Parser
 cfg = parse_file("baseline.rsc")
@@ -73,17 +86,23 @@ print(emit(ops))
 
 # Bundle
 text = bundle("rsc/segmented", vars_dir="rsc/")
+text = bundle("src/segmented", vars_dir="src/", yaml=True)  # YAML mode
+
+# YAML -> .rsc (used internally by bundle(..., yaml=True), but exposed
+# for ad-hoc rendering of a single file).
+rsc_text = to_rsc_file("src/segmented/40-firewall.yaml")
 ```
 
 ## Architecture
 
-Three subpackages under one umbrella, each independently importable:
+Four subpackages under one umbrella, each independently importable:
 
 | Subpackage     | Role                                                                  |
 | -------------- | --------------------------------------------------------------------- |
 | `rsc.parser`   | Lexes `.rsc` into `Config` / `Item` / `Op`. Resolves `iac.<type>.<id>` identity. **Library only.** |
 | `rsc.bundle`   | Profile-folder loader + flattener + compact emitter. CLI: `rsc bundle`. |
 | `rsc.diff`     | Per-menu differ + patch emitter + in-memory verifier. CLI: `rsc diff`. |
+| `rsc.yaml`     | YAML → `.rsc` renderer (module + globals shapes). Library only; opt-in via `rsc bundle --yaml`. |
 
 The top-level `rsc.cli.main` is a thin dispatcher:
 
@@ -103,8 +122,11 @@ uv run pytest -q tests/parser   # one subpackage only
 uv run pytest -q --cov          # coverage report
 ```
 
-Tests live under `tests/{parser,bundle,diff}/` and import their
-subpackage by full dotted name (`from rsc.bundle import ...` etc).
+Tests live under `tests/{parser,bundle,diff,yaml_subpkg}/` and import
+their subpackage by full dotted name (`from rsc.bundle import ...`
+etc). The `yaml_subpkg/` directory holds the `rsc.yaml` tests — the
+odd suffix avoids shadowing the installed `pyyaml` package when
+pytest puts `tests/` on `sys.path`.
 
 ## Running router-side actions
 

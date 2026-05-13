@@ -63,7 +63,13 @@ from rsc.parser import parse_text
 
 from .compact import emit as compact_emit
 from .flatten import flatten
-from .loader import LoaderError, concat, load_profile
+from .loader import (
+    LoaderError,
+    concat,
+    concat_named,
+    load_profile,
+    load_yaml_profile,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -100,6 +106,17 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--yaml",
+        action="store_true",
+        help=(
+            "treat the profile + vars folders as YAML sources (.yaml). "
+            "Each file is rendered to .rsc text via rsc.yaml before the "
+            "normal flatten + parse + compact pipeline runs. The bundle "
+            "output is identical to the .rsc-mode output for a "
+            "correctly authored YAML profile."
+        ),
+    )
+    parser.add_argument(
         "-o", "--out",
         type=Path,
         default=None,
@@ -130,12 +147,15 @@ def main(argv: list[str] | None = None) -> int:
     vars_dir = _resolve_vars_dir(args.vars, profile)
 
     try:
-        files = load_profile(profile, vars_dir=vars_dir)
+        if args.yaml:
+            pairs = load_yaml_profile(profile, vars_dir=vars_dir)
+            raw = concat_named(pairs)
+        else:
+            files = load_profile(profile, vars_dir=vars_dir)
+            raw = concat(files)
     except LoaderError as exc:
         print(f"rsc bundle: {exc}", file=sys.stderr)
         return 2
-
-    raw = concat(files)
 
     if args.no_flatten:
         # Bypass flatten/compact entirely. The raw concat is what gets

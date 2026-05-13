@@ -219,3 +219,118 @@ def test_missing_required_profile_flag_exits_2() -> None:
     with pytest.raises(SystemExit) as exc:
         bundle_main([])
     assert exc.value.code == 2
+
+
+# --- --yaml mode ------------------------------------------------------------
+
+YAML_PROFILE = FIX / "yaml-profile"
+YAML_VARS = FIX / "yaml-vars"
+
+
+def test_yaml_mode_renders_via_rsc_yaml(tmp_path: Path) -> None:
+    """``--yaml`` loads .yaml files and runs them through rsc.yaml first."""
+    out = tmp_path / "bundle.rsc"
+    rc = bundle_main([
+        "--profile", str(YAML_PROFILE),
+        "--vars", str(YAML_VARS),
+        "--yaml",
+        "-o", str(out),
+    ])
+    assert rc == 0
+    text = out.read_text(encoding="utf-8")
+    # Default pipeline ran: vars resolved, no `:global` lines left.
+    assert ":global" not in text
+    # Variable substitution worked: $routerName -> TestRouter.
+    assert "set name=TestRouter" in text
+    # `set [find ...]` selectors round-tripped through the YAML form.
+    assert "set [find name=admin]" in text
+    # `/ip/service` rows kept the bare `set <name>` form.
+    assert "set winbox" in text
+    assert "set ssh" in text
+
+
+def test_yaml_mode_matches_rsc_mode_output(tmp_path: Path) -> None:
+    """The YAML and .rsc fixture profiles describe the same config; the
+    bundler output must be structurally equivalent (same items per menu,
+    same identity keys, same property values) even though the literal
+    column order may differ -- the .rsc fixture and the YAML fixture
+    happen to emit `name=` and `comment=` in different order, and that
+    order is preserved through compact emit."""
+    from rsc.parser import parse_text  # local import: keeps top of file lean
+
+    rsc_out = tmp_path / "from-rsc.rsc"
+    yaml_out = tmp_path / "from-yaml.rsc"
+
+    bundle_main(_base_args(rsc_out))
+    bundle_main([
+        "--profile", str(YAML_PROFILE),
+        "--vars", str(YAML_VARS),
+        "--yaml",
+        "-o", str(yaml_out),
+    ])
+
+    rsc_cfg = parse_text(rsc_out.read_text(encoding="utf-8"))
+    yaml_cfg = parse_text(yaml_out.read_text(encoding="utf-8"))
+
+    # Same set of menus, in the same order.
+    assert list(rsc_cfg.items_by_menu) == list(yaml_cfg.items_by_menu)
+    # Same items per menu (compared as prop dicts -- key order in the
+    # underlying mapping doesn't matter for semantics).
+    for menu in rsc_cfg.items_by_menu:
+        rsc_items = rsc_cfg.items_by_menu[menu]
+        yaml_items = yaml_cfg.items_by_menu[menu]
+        assert len(rsc_items) == len(yaml_items), menu
+        for r, y in zip(rsc_items, yaml_items):
+            assert r.verb == y.verb
+            assert dict(r.props) == dict(y.props), (menu, r.props, y.props)
+
+
+def test_yaml_mode_no_flatten_keeps_globals(tmp_path: Path) -> None:
+    out = tmp_path / "raw.rsc"
+    rc = bundle_main([
+        "--profile", str(YAML_PROFILE),
+        "--vars", str(YAML_VARS),
+        "--yaml",
+        "-o", str(out),
+        "--no-flatten",
+    ])
+    assert rc == 0
+    text = out.read_text(encoding="utf-8")
+    # Raw concat keeps :global lines (rendered from `globals:` entries).
+    assert ":global adminPass" in text
+    # Banners use the .rsc-suffix synthetic name.
+    assert "begin secrets.rsc" in text
+    assert "begin vars.rsc" in text
+
+
+def test_yaml_mode_empty_profile_returns_2(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``LoaderError`` for ``no .yaml files`` (vs ``no .rsc files``)."""
+    empty = tmp_path / "empty-yaml-profile"
+    empty.mkdir()
+    rc = bundle_main(["--profile", str(empty), "--yaml"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert ".yaml" in err
+
+
+def test_yaml_mode_malformed_yaml_returns_2(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A YamlError from the converter surfaces as exit 2 with the file path."""
+    profile = tmp_path / "broken"
+    profile.mkdir()
+    (profile / "10-bad.yaml").write_text(
+        "interface:\n  list:\n    - name: oops-no-operation\n",
+        encoding="utf-8",
+    )
+    rc = bundle_main([
+        "--profile", str(profile),
+        "--yaml",
+        "-o", str(tmp_path / "out.rsc"),
+    ])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "10-bad.yaml" in err
+    assert "operation" in err

@@ -55,32 +55,48 @@ from rsc.parser import parse_text
 from .bundler import BundleError, bundle_inline, bundle_file
 from .compact import emit as _compact_emit
 from .flatten import flatten
-from .loader import LoaderError, concat, load_profile
+from .loader import (
+    LoaderError,
+    concat,
+    concat_named,
+    load_profile,
+    load_yaml_profile,
+)
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 
 def bundle(
     profile_dir: str | Path,
     *,
     vars_dir: str | Path | None = None,
+    yaml: bool = False,
     flatten_output: bool = True,
 ) -> str:
     """Bundle a flat profile folder into a deploy-ready ``.rsc`` string.
 
     Args:
-        profile_dir: path to the profile folder (e.g. ``rsc/segmented``).
-        vars_dir: optional folder of ``:global`` ``.rsc`` files to load
-            before the profile modules. Every ``*.rsc`` at the top level
+        profile_dir: path to the profile folder (e.g. ``rsc/segmented``
+            or, with ``yaml=True``, ``src/segmented``).
+        vars_dir: optional folder of ``:global`` files to load before
+            the profile modules. Every matching file at the top level
             (alphabetical) is included. Pass ``None`` (default) to skip.
             The convention is to point this at the shared
-            ``<profile-parent>`` folder (e.g. ``rsc/``).
-        flatten_output: when True (default), substitute ``:global`` vars,
-            strip scripting wrappers, parse + re-emit one-line-per-op.
-            When False, return the raw concatenated source.
+            ``<profile-parent>`` folder (e.g. ``rsc/`` or ``src/``).
+        yaml: when True, treat *profile_dir* and *vars_dir* as YAML
+            sources (``.yaml``). Each file is rendered to ``.rsc`` text
+            via :mod:`rsc.yaml` before the normal pipeline runs.
+        flatten_output: when True (default), substitute ``:global``
+            vars, strip scripting wrappers, parse + re-emit
+            one-line-per-op. When False, return the raw concatenated
+            source.
     """
-    files = load_profile(profile_dir, vars_dir=vars_dir)
-    text = concat(files)
+    if yaml:
+        pairs = load_yaml_profile(profile_dir, vars_dir=vars_dir)
+        text = concat_named(pairs)
+    else:
+        files = load_profile(profile_dir, vars_dir=vars_dir)
+        text = concat(files)
     if not flatten_output:
         return text
     flat = flatten(text)
@@ -95,6 +111,8 @@ __all__ = [
     "bundle_inline",
     "bundle_file",
     "bundle",
+    "concat_named",
     "flatten",
     "load_profile",
+    "load_yaml_profile",
 ]

@@ -1,0 +1,10 @@
+ip:
+  service:
+    - operation: set
+      filter: winbox
+      address:
+        var: adminCidrs
+    - operation: set
+      filter: ssh
+      address:
+        var: adminCidrs

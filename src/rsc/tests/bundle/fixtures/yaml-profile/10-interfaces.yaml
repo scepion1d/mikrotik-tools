@@ -1,0 +1,20 @@
+# YAML mirror of the .rsc profile fixture, used by tests/bundle/test_cli.py
+# to verify that `rsc bundle --yaml` produces the same flattened output as
+# the equivalent .rsc-mode bundle.
+interface:
+  list:
+    - operation: add
+      id: iac.list.wan
+      comment: WAN uplink
+      name: iac.list.wan
+    - operation: add
+      id: iac.list.lan
+      comment: LAN
+      name: iac.list.lan
+
+  ethernet:
+    - operation: set
+      filter: default-name=ether1
+      id: iac.ether.wan
+      comment: WAN uplink
+      name: iac.ether.wan

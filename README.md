@@ -14,11 +14,12 @@ Two Python tools for working with a MikroTik RouterOS device:
 ```
 tools/
 ├── src/
-│   ├── rsc/                 one venv, one CLI ('rsc'), three subpackages
+│   ├── rsc/                 one venv, one CLI ('rsc'), four subpackages
 │   │   └── rsc/
 │   │       ├── parser/      shared parser + identity model (library)
 │   │       ├── bundle/      'rsc bundle' subcommand
-│   │       └── diff/        'rsc diff' subcommand
+│   │       ├── diff/        'rsc diff' subcommand
+│   │       └── yaml/        YAML -> .rsc renderer (used by 'rsc bundle --yaml')
 │   └── mtctl/               standalone (paramiko)
 ├── bin/                     gitignored: tool shims (.cmd / symlink)
 └── build.ps1                sync all tools, refresh shims in bin/
@@ -29,7 +30,7 @@ tools/
 - **Python ≥ 3.10**
 - **[uv](https://docs.astral.sh/uv/)** for venv + dependency management (one venv per tool under `src/<tool>/.venv/`)
 - Runtime:
-  - `rsc` — zero external deps
+  - `rsc` — `pyyaml` (used by the `rsc.yaml` subpackage behind `rsc bundle --yaml`); the parser, bundler, and differ themselves stay dep-free
   - `mtctl` — `paramiko`
 - Dev: `pytest` (per-tool dev dependency group)
 
@@ -56,8 +57,8 @@ End-to-end pipeline:
 
 ```powershell
 # 1. bundle a profile -> single self-contained .rsc
-#    Globals at <profile-parent>/{secrets,vars}.rsc are auto-discovered.
-.\bin\rsc.cmd bundle --profile ..\rsc\segmentedx3 -o ..\out
+#    Globals at <profile-parent>/{secrets,vars}.yaml are auto-discovered.
+.\bin\rsc.cmd bundle --profile ..\src\segmentedx3 --yaml -o ..\out
 # -> ..\out\segmentedx3-YYMMDD-XXXXX.rsc
 
 # 2. capture live router state
@@ -108,5 +109,5 @@ uv run pytest -q --cov          # tool-local coverage report
 
 | Tool   | State                                                                                                           |
 | ------ | --------------------------------------------------------------------------------------------------------------- |
-| `rsc`  | ✅ stable; `bundle` + `diff` working; `diff` roundtrip mode verifies fwd+back patches in-memory.               |
+| `rsc`  | ✅ stable; `bundle` (with optional `--yaml` source mode) + `diff` working; `diff` roundtrip mode verifies fwd+back patches in-memory. |
 | `mtctl`| ✅ stable; SFTP upload/download + `/system/backup save` + `/export show-sensitive` working end-to-end.         |
