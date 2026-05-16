@@ -19,8 +19,9 @@ import sys
 
 # Map subcommand -> "import path : function" of the subcommand's main().
 _SUBCOMMANDS = {
-    "bundle": ("rsc.bundle.cli", "main"),
-    "diff":   ("rsc.diff.cli",   "main"),
+    "bundle":  ("rsc.bundle.cli",       "main"),
+    "diff":    ("rsc.diff.cli",         "main"),
+    "reverse": ("rsc.yaml.reverse_cli", "main"),
 }
 
 
@@ -50,10 +51,11 @@ def main(argv: list[str] | None = None) -> int:
 def _print_usage(stream=None) -> None:
     out = stream or sys.stdout
     print(
-        "usage: rsc {bundle,diff} ...\n"
+        "usage: rsc {bundle,diff,reverse} ...\n"
         "\n"
         "  bundle   merge a flat RouterOS profile folder into one minimal .rsc\n"
         "  diff     diff two .rsc configs into a runnable patch\n"
+        "  reverse  convert an .rsc back to YAML profile sources (src/<profile>/)\n"
         "\n"
         "Run 'rsc <subcommand> --help' for subcommand options.",
         file=out,

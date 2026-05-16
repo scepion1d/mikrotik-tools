@@ -4,8 +4,9 @@ Python toolkit for RouterOS `.rsc` script processing. One CLI with two
 subcommands plus a shared parser library.
 
 ```text
-rsc bundle --profile <folder> [--yaml] [...]  # merge profile -> single minimal .rsc
-rsc diff   --old A.rsc --new B.rsc            # diff two configs into a runnable patch
+rsc bundle  --profile <folder> [--yaml] [...]  # merge profile -> single minimal .rsc
+rsc diff    --old A.rsc --new B.rsc            # diff two configs into a runnable patch
+rsc reverse --src live.rsc -o src/profile/     # convert .rsc back to YAML profile sources
 ```
 
 The optional `--yaml` flag treats the profile + vars folders as YAML
@@ -79,6 +80,33 @@ rsc diff --old live.rsc --new candidate.rsc \
 `--lenient` suppresses asymmetric "neutral" defaults drift; `--strict`
 disables the per-menu defaults table entirely.
 
+### `rsc reverse`
+
+The inverse of `rsc bundle --yaml`: parse a `.rsc` file (typically
+`mtctl backup`'s `live.rsc`) and emit YAML profile sources under
+`src/<profile>/`. Bootstraps a fresh profile from an existing router.
+
+```powershell
+rsc reverse --src live.rsc -o src\myrouter\          # writes 10-interface.yaml, 30-ip.yaml, ...
+rsc reverse --src live.rsc -o src\myrouter\ --overwrite   # replace any existing files
+```
+
+Output is one `NN-<top-menu>.yaml` per top-level RouterOS menu (same
+`NN-` numbering as the hand-authored profiles). Items keep their
+`iac.*` identity tokens; `set` rows preserve their `[find ...]`
+selector as `filter:`; multi-space column padding around `--` in
+comments is preserved via `id_pad`. Round-trip through
+`rsc bundle --yaml` is byte-equivalent to the input (verifiable with
+`rsc diff --check`).
+
+Workflow:
+```powershell
+mtctl backup                            # router-side .backup + live.rsc
+mtctl download live.rsc -o live.rsc     # pull it down
+rsc reverse --src live.rsc -o src\myrouter\
+git add src\myrouter\
+```
+
 ## Library
 
 ```python
@@ -101,6 +129,10 @@ text = bundle("src/segmented", vars_dir="src/", yaml=True)  # YAML mode
 # YAML -> .rsc (used internally by bundle(..., yaml=True), but exposed
 # for ad-hoc rendering of a single file).
 rsc_text = to_rsc_file("src/segmented/40-firewall.yaml")
+
+# .rsc -> YAML (the inverse; used by `rsc reverse`).
+from rsc.yaml import to_yaml_files
+written = to_yaml_files(parse_file("live.rsc"), "src/new_profile/")
 ```
 
 ## Architecture
@@ -112,13 +144,14 @@ Four subpackages under one umbrella, each independently importable:
 | `rsc.parser`   | Lexes `.rsc` into `Config` / `Item` / `Op`. Resolves `iac.<type>.<id>` identity. **Library only.** |
 | `rsc.bundle`   | Profile-folder loader + flattener + compact emitter. CLI: `rsc bundle`. |
 | `rsc.diff`     | Per-menu differ + patch emitter + in-memory verifier. CLI: `rsc diff`. |
-| `rsc.yaml`     | YAML → `.rsc` renderer (module + globals shapes). Library only; opt-in via `rsc bundle --yaml`. |
+| `rsc.yaml`     | YAML → `.rsc` renderer + `.rsc` → YAML reverser + JSON Schema validator. CLIs: `rsc bundle --yaml`, `rsc bundle --validate`, `rsc reverse`. |
 
 The top-level `rsc.cli.main` is a thin dispatcher:
 
 ```python
-rsc bundle ...   ->   rsc.bundle.cli.main(<rest>)
-rsc diff   ...   ->   rsc.diff.cli.main(<rest>)
+rsc bundle  ...  ->   rsc.bundle.cli.main(<rest>)
+rsc diff    ...  ->   rsc.diff.cli.main(<rest>)
+rsc reverse ...  ->   rsc.yaml.reverse_cli.main(<rest>)
 ```
 
 Each sub-CLI keeps its own argparser and `--help`. No single merged

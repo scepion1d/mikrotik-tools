@@ -25,11 +25,15 @@ Public API
 - :func:`validate_text`          -- validate YAML text + line-numbered errors
 - :func:`validate`               -- validate an already-parsed mapping
 - :class:`SchemaValidationError` -- raised on any schema violation
+- :func:`to_yaml_files`          -- reverse: write a Config as ``NN-*.yaml`` files
+- :func:`to_yaml_docs`           -- reverse: build ``{filename: doc}`` in memory
+- :func:`item_to_yaml`           -- reverse: convert one Item to a YAML mapping
 """
 
 from __future__ import annotations
 
 from .converter import YamlError, to_rsc, to_rsc_file
+from .reverse import item_to_yaml, to_yaml_docs, to_yaml_files
 from .validate import (
     SchemaValidationError,
     validate,
@@ -37,14 +41,17 @@ from .validate import (
     validate_text,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "SchemaValidationError",
     "YamlError",
     "__version__",
+    "item_to_yaml",
     "to_rsc",
     "to_rsc_file",
+    "to_yaml_docs",
+    "to_yaml_files",
     "validate",
     "validate_file",
     "validate_text",
