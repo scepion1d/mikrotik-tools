@@ -22,6 +22,7 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: src/${{ matrix.tool }}/uv.lock
+          cache-suffix: ${{ matrix.tool }}-py${{ matrix.python-version }}
 
       - name: Sync
         working-directory: src/${{ matrix.tool }}
