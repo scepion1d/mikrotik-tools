@@ -5,7 +5,7 @@ Two Python tools for working with a MikroTik RouterOS device:
 | Tool                           | Role                                                                       |
 | ------------------------------ | -------------------------------------------------------------------------- |
 | [`rsc`](src/rsc/)              | **Script processing.** Parser library + `bundle` + `diff` subcommands.    |
-| [`mtctl`](src/mtctl/)          | **Router control.** SSH/SFTP: upload, download, trigger router-side backup. |
+| [`mtctl`](src/mtctl/)          | **Router control.** SSH/SFTP: upload, download, trigger router-side backup, stream `/export` to local file. |
 
 `rsc` is offline / read-only; `mtctl` talks to the device.
 
@@ -110,4 +110,4 @@ uv run pytest -q --cov          # tool-local coverage report
 | Tool   | State                                                                                                           |
 | ------ | --------------------------------------------------------------------------------------------------------------- |
 | `rsc`  | ✅ stable; `bundle` (with optional `--yaml` source mode) + `diff` working; `diff` roundtrip mode verifies fwd+back patches in-memory. |
-| `mtctl`| ✅ stable; SFTP upload/download + `/system/backup save` + `/export show-sensitive` working end-to-end.         |
+| `mtctl`| ✅ stable; SFTP upload/download + `/system/backup save` + `/export show-sensitive` working end-to-end. `mtctl export` streams `/export` over SSH stdout for read-only / cron-driven checks.         |

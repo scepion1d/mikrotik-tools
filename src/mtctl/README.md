@@ -1,11 +1,12 @@
 # mtctl
 
-paramiko-based SSH/SFTP utility for RouterOS. Three subcommands:
+paramiko-based SSH/SFTP utility for RouterOS. Five subcommands:
 **upload** (local → router), **download** (router → local),
-**backup** (trigger router-side snapshot of state), and **import**
-(run `/import file-name=...` on the router). Reads connection
-details from `.env`. File transfers always overwrite the destination
-and auto-create missing parent directories.
+**backup** (trigger router-side snapshot of state), **export**
+(stream `/export` over SSH stdout to a local file -- read-only,
+cron-safe), and **import** (run `/import file-name=...` on the
+router). Reads connection details from `.env`. File transfers always
+overwrite the destination and auto-create missing parent directories.
 
 ## Install
 
@@ -58,7 +59,7 @@ the SSH/SFTP layer; otherwise, it's connectivity.
 ## CLI
 
 ```text
-usage: mtctl {upload,download,backup,import} ...
+usage: mtctl {upload,download,backup,export,import} ...
 ```
 
 ### upload
@@ -138,6 +139,52 @@ mtctl backup --password "$env:BACKUP_PW" -v
 > contains plaintext PSKs, admin passwords, and any other secrets
 > RouterOS tracks. Treat the folder (and any local copy) as secret
 > material; don't commit it.
+
+### export
+
+```text
+mtctl export --dst LOCAL [--no-sensitive] [--env ENV] [--dry-run] [-v]
+
+  --dst LOCAL    local destination file path (typically .rsc)
+  --no-sensitive omit `show-sensitive` so PSKs / passwords come back as placeholders
+  --env ENV      path to .env file (default: walk up from cwd looking for .env)
+  --dry-run      report what would happen without touching the router
+  -v, --verbose  -v INFO logs (default WARNING); -vv DEBUG
+```
+
+Lightweight, read-only alternative to `backup`. Runs `/export
+show-sensitive` on the router and captures stdout via SSH; **writes
+nothing to the router's flash**. Use this when:
+
+- Running on a schedule (cron / Windows Task Scheduler) -- avoids the
+  forever-growing `backups/<ts>/` tree.
+- Comparing live vs candidate (see `drift.ps1` at the iac repo root)
+  without altering router state.
+- Pulling a one-off config view for a manual diff.
+
+When you need a recoverable snapshot (e.g. before deploy), use
+`backup` -- its `.backup` binary is the only thing `/system/backup
+load` can fully restore.
+
+Examples:
+
+```powershell
+# Quick on-demand snapshot.
+mtctl export --dst .\out\live.rsc -v
+
+# Redacted (no secrets) for sharing.
+mtctl export --dst .\out\redacted.rsc --no-sensitive
+```
+
+Prints the local path on stdout so the command chains nicely:
+
+```powershell
+$snap = mtctl export --dst .\out\live.rsc
+rsc diff --old $snap --new .\out\candidate.rsc --check
+```
+
+> Same security note as `backup`: `show-sensitive` output contains
+> plaintext secrets. Treat the local file as sensitive material.
 
 ### import
 

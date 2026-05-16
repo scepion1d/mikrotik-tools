@@ -1,18 +1,22 @@
 """Command-line entry point for mtctl.
 
-Four subcommands::
+Five subcommands::
 
     mtctl upload   --src LOCAL  --dst REMOTE  [--env ENV] [--dry-run] [-v]
     mtctl download --src REMOTE --dst LOCAL   [--env ENV] [--dry-run] [-v]
     mtctl backup   [--password PW | --no-encrypt] [--env ENV] [--dry-run] [-v]
+    mtctl export   --dst LOCAL  [--no-sensitive] [--env ENV] [--dry-run] [-v]
     mtctl import   --src REMOTE [--quiet] [--env ENV] [--dry-run] [-v]
 
 ``upload`` and ``download`` require ``--src`` and ``--dst``. The
 destination's parent directory is created if missing; an existing file
 at the destination is overwritten. ``backup`` triggers a router-side
 snapshot under ``backups/<timestamp>/`` and prints the folder path on
-stdout. ``import`` runs ``/import file-name=<src>`` on the router
-against a previously-uploaded ``.rsc`` script.
+stdout. ``export`` is a lightweight read-only alternative -- it streams
+``/export show-sensitive`` to a local file via SSH stdout without
+touching the router's flash. ``import`` runs
+``/import file-name=<src>`` on the router against a previously-uploaded
+``.rsc`` script.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ from pathlib import Path
 from .backup import BackupError, create_backup
 from .config import EnvError, load_env
 from .deployer import DeployError, download, upload
+from .export import ExportError, export_config
 from .importer import ImportError as RouterImportError, run_import
 from .sftp import SftpError
 from .ssh import SshError
@@ -33,7 +38,8 @@ from .ssh import SshError
 # Exceptions surfaced by subcommand handlers as the user-visible exit-1.
 # Anything else propagates as an uncaught traceback (programmer error).
 _HANDLED_ERRORS = (
-    DeployError, BackupError, RouterImportError, SshError, SftpError,
+    DeployError, BackupError, ExportError, RouterImportError,
+    SshError, SftpError,
 )
 
 
@@ -52,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
         # argparse with required=False on subparsers prints nothing on
         # bare invocation; make the failure visible.
         print(
-            "mtctl: missing subcommand (upload|download|backup|import); use -h",
+            "mtctl: missing subcommand (upload|download|backup|export|import); use -h",
             file=sys.stderr,
         )
         return 2
@@ -94,6 +100,16 @@ def _dispatch(args: argparse.Namespace, settings) -> int:
         print(folder)
         return 0
 
+    if args.command == "export":
+        path = export_config(
+            settings, args.dst,
+            sensitive=not args.no_sensitive, dry_run=args.dry_run,
+        )
+        # Print the local destination so callers can pipe straight to
+        # `rsc bundle`, `rsc diff`, etc.
+        print(path)
+        return 0
+
     if args.command == "import":
         run_import(
             args.src, settings,
@@ -121,12 +137,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(
         dest="command",
-        metavar="{upload,download,backup,import}",
+        metavar="{upload,download,backup,export,import}",
     )
 
     _add_upload_parser(sub)
     _add_download_parser(sub)
     _add_backup_parser(sub)
+    _add_export_parser(sub)
     _add_import_parser(sub)
 
     return parser
@@ -190,6 +207,31 @@ def _add_backup_parser(sub: argparse._SubParsersAction) -> None:
     enc.add_argument(
         "--no-encrypt", action="store_true",
         help="explicitly request an unencrypted .backup (the default already)",
+    )
+    _add_common_flags(p)
+
+
+def _add_export_parser(sub: argparse._SubParsersAction) -> None:
+    p = sub.add_parser(
+        "export",
+        help="stream /export to a local file (lightweight; no router-side write)",
+        description=(
+            "Run /export show-sensitive on the router and capture stdout "
+            "into a local file via SSH exec. Unlike `mtctl backup`, this "
+            "writes nothing to the router's flash -- suitable for cron / "
+            "scheduled drift checks. Prints the local path on stdout."
+        ),
+    )
+    p.add_argument(
+        "--dst", type=Path, required=True,
+        help="local destination file path (typically .rsc)",
+    )
+    p.add_argument(
+        "--no-sensitive", action="store_true",
+        help=(
+            "omit `show-sensitive` so PSKs / passwords come back as "
+            "placeholders (safe to attach to bug reports etc.)"
+        ),
     )
     _add_common_flags(p)
 
