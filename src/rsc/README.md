@@ -1,6 +1,6 @@
 # rsc
 
-Python toolkit for RouterOS `.rsc` script processing. One CLI with two
+Python toolkit for RouterOS `.rsc` script processing. One CLI with four
 subcommands plus a shared parser library.
 
 ```text

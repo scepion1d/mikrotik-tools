@@ -4,8 +4,8 @@ Two Python tools for working with a MikroTik RouterOS device:
 
 | Tool                           | Role                                                                       |
 | ------------------------------ | -------------------------------------------------------------------------- |
-| [`rsc`](src/rsc/)              | **Script processing.** Parser library + `bundle` + `diff` subcommands.    |
-| [`mtctl`](src/mtctl/)          | **Router control.** SSH/SFTP: upload, download, trigger router-side backup, stream `/export` to local file. |
+| [`rsc`](src/rsc/)              | **Script processing.** Parser library + `bundle`, `diff`, `reverse`, `lint` subcommands. |
+| [`mtctl`](src/mtctl/)          | **Router control.** SSH/SFTP: upload, download, backup, export, import (`--validate` / `--safe-mode`), rm. |
 
 `rsc` is offline / read-only; `mtctl` talks to the device.
 
@@ -14,13 +14,15 @@ Two Python tools for working with a MikroTik RouterOS device:
 ```
 tools/
 ├── src/
-│   ├── rsc/                 one venv, one CLI ('rsc'), four subpackages
+│   ├── rsc/                 one venv, one CLI ('rsc'), five subpackages
 │   │   └── rsc/
 │   │       ├── parser/      shared parser + identity model (library)
-│   │       ├── bundle/      'rsc bundle' subcommand
-│   │       ├── diff/        'rsc diff' subcommand
-│   │       └── yaml/        YAML -> .rsc renderer (used by 'rsc bundle --yaml')
-│   └── mtctl/               standalone (paramiko)
+│   │       ├── bundle/      'rsc bundle' subcommand (--yaml, --validate, --no-flatten)
+│   │       ├── diff/        'rsc diff' subcommand (single-patch + roundtrip modes)
+│   │       ├── yaml/        YAML ↔ .rsc converter + JSON Schema validator
+│   │       │                 (powers 'rsc bundle --yaml', 'bundle --validate', 'rsc reverse')
+│   │       └── lint/        'rsc lint' semantic checks (also dispatched via rsc.lint_cli)
+│   └── mtctl/               standalone (paramiko); six subcommands
 ├── bin/                     gitignored: tool shims (.cmd / symlink)
 └── build.ps1                sync all tools, refresh shims in bin/
 ```
@@ -58,13 +60,22 @@ End-to-end pipeline:
 ```powershell
 # 1. bundle a profile -> single self-contained .rsc
 #    Globals at <profile-parent>/{secrets,vars}.yaml are auto-discovered.
-.\bin\rsc.cmd bundle --profile ..\src\segmentedx3 --yaml -o ..\out
+#    `--validate` checks the YAML against src/schema.json before render.
+.\bin\rsc.cmd bundle --profile ..\src\segmentedx3 --yaml --validate -o ..\out
 # -> ..\out\segmentedx3-YYMMDD-XXXXX.rsc
 
-# 2. capture live router state
+# 1a. (optional) semantic lint of the bundled config: duplicate ids,
+#     dangling cross-refs, orphan DHCP pool wiring.
+.\bin\rsc.cmd lint --profile ..\src\segmentedx3 --yaml
+
+# 2. capture live router state. Two options:
+#    a) `backup` -- snapshot to router flash (recoverable .backup pair).
 .\bin\mtctl.cmd backup --no-encrypt
-#    -> backups/<timestamp>/{live.backup, live.rsc} on the router
+#       -> backups/<timestamp>/{live.backup, live.rsc} on the router
 .\bin\mtctl.cmd download --src backups/<timestamp>/live.rsc --dst ..\out\live.rsc
+#    b) `export` -- stream /export over SSH stdout; nothing on router flash.
+#       Lighter; preferred for cron / drift checks.
+.\bin\mtctl.cmd export --dst ..\out\live.rsc
 
 # 3. emit + verify both patches in one go
 $candidate = (Get-ChildItem ..\out\segmentedx3-*.rsc | Sort Name | Select -Last 1).FullName
@@ -74,9 +85,14 @@ $candidate = (Get-ChildItem ..\out\segmentedx3-*.rsc | Sort Name | Select -Last 
     --lenient
 # Both legs must report "OK -- differ reports no residual drift" before proceeding.
 
-# 4. apply on router
+# 4. apply on router. Default is `/import` (you re-run if it fails);
+#    add `--safe-mode` to wrap in RouterOS /safe-mode so failures or
+#    session drops auto-revert via the 9-minute timer.
 .\bin\mtctl.cmd upload --src ..\out\rollforward.rsc --dst rollforward.rsc
-#    (in Winbox / SSH terminal): /import file-name=rollforward.rsc
+.\bin\mtctl.cmd import --src rollforward.rsc --safe-mode -v
+
+# Inverse direction: turn a live router into YAML profile sources.
+.\bin\rsc.cmd reverse --src ..\out\live.rsc -o ..\src\myrouter\
 ```
 
 Per-tool details, full `--help` output, and known issues live in each tool's README.
@@ -109,5 +125,5 @@ uv run pytest -q --cov          # tool-local coverage report
 
 | Tool   | State                                                                                                           |
 | ------ | --------------------------------------------------------------------------------------------------------------- |
-| `rsc`  | ✅ stable; `bundle` (with optional `--yaml` source mode) + `diff` working; `diff` roundtrip mode verifies fwd+back patches in-memory. |
-| `mtctl`| ✅ stable; SFTP upload/download + `/system/backup save` + `/export show-sensitive` working end-to-end. `mtctl export` streams `/export` over SSH stdout for read-only / cron-driven checks.         |
+| `rsc`  | ✅ stable; `bundle` (`--yaml` source mode + `--validate` JSON-Schema check), `diff` (single + roundtrip), `reverse` (.rsc → YAML), `lint` (duplicate ids, dangling refs, orphan pool wiring) all working. |
+| `mtctl`| ✅ stable; SFTP `upload` / `download` + router-side `backup` (write to flash) + read-only `export` (stream `/export` over SSH stdout, cron-safe) + `import` (with `--validate` for router-side probe and `--safe-mode` for auto-rollback) + `rm` (cleanup). |
