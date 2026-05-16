@@ -5,6 +5,9 @@ secrets.rsc
 *.secret
 *.pem
 *.key
+# ...except test fixtures (synthetic data, safe to commit).
+!**/tests/**/secrets.rsc
+!**/tests/**/*.secrets.rsc
 
 # Deploy credentials (.env.example IS committed)
 .env
