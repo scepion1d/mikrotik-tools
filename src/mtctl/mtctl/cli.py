@@ -121,6 +121,7 @@ def _dispatch(args: argparse.Namespace, settings) -> int:
             verbose=not args.quiet,
             dry_run=args.dry_run,
             validate=args.validate,
+            safe_mode=args.safe_mode,
         )
         return 0
 
@@ -275,6 +276,15 @@ def _add_import_parser(sub: argparse._SubParsersAction) -> None:
             "probe the file on the router (exists / size; :parse for "
             "small files) without running /import. Mutually exclusive "
             "with --dry-run; intended for `deploy.ps1 -DryRun`."
+        ),
+    )
+    p.add_argument(
+        "--safe-mode", action="store_true", dest="safe_mode",
+        help=(
+            "wrap the /import in RouterOS /safe-mode: commit on success, "
+            "revert on failure, and 9-minute auto-revert if the SSH "
+            "session drops mid-script. Uses an interactive shell. "
+            "Mutually exclusive with --dry-run and --validate."
         ),
     )
     _add_common_flags(p)

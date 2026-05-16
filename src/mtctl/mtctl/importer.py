@@ -36,6 +36,7 @@ def run_import(
     verbose: bool = True,
     dry_run: bool = False,
     validate: bool = False,
+    safe_mode: bool = False,
 ) -> str:
     """Run ``/import file-name=<remote_path>`` on the router.
 
@@ -55,6 +56,14 @@ def run_import(
     before committing to the apply. Mutually exclusive with *dry_run*
     (which short-circuits before SSH).
 
+    *safe_mode* wraps the apply in RouterOS ``/safe-mode``: commit on
+    success, revert on failure, and -- crucially -- if the SSH session
+    drops mid-import, the router auto-reverts after 9 minutes. Uses an
+    interactive shell (not exec_command) since ``/safe-mode`` is
+    bound to the console session that entered it. Mutually exclusive
+    with *dry_run* and *validate*. See
+    :mod:`mtctl.safemode_shell` for the protocol details.
+
     Returns the combined stdout+stderr captured from the router (useful
     for surfacing the line-by-line ``verbose=yes`` output). Under
     *dry_run* / *validate*, returns the validation summary instead.
@@ -65,17 +74,30 @@ def run_import(
     """
     if not remote_path:
         raise ImportError("remote_path must not be empty")
+    # Mutex matrix: dry_run is no-SSH; validate runs SSH probes;
+    # safe_mode runs an interactive shell. Pairs of any two would
+    # produce ambiguous behaviour.
     if dry_run and validate:
         raise ImportError(
             "--dry-run and --validate are mutually exclusive "
             "(--dry-run is no-SSH; --validate requires SSH)"
         )
+    if dry_run and safe_mode:
+        raise ImportError(
+            "--dry-run and --safe-mode are mutually exclusive "
+            "(--dry-run is no-SSH; --safe-mode requires an interactive shell)"
+        )
+    if validate and safe_mode:
+        raise ImportError(
+            "--validate and --safe-mode are mutually exclusive "
+            "(--validate probes without running; --safe-mode runs under rollback)"
+        )
 
     command = _import_command(remote_path, verbose=verbose)
 
     log.info(
-        "import: file=%s host=%s verbose=%s dry_run=%s validate=%s",
-        remote_path, settings.host, verbose, dry_run, validate,
+        "import: file=%s host=%s verbose=%s dry_run=%s validate=%s safe_mode=%s",
+        remote_path, settings.host, verbose, dry_run, validate, safe_mode,
     )
 
     if dry_run:
@@ -84,6 +106,9 @@ def run_import(
 
     if validate:
         return _validate_remote_script(remote_path, settings)
+
+    if safe_mode:
+        return _import_under_safe_mode(command, remote_path, settings)
 
     with SshSession(settings) as ssh:
         status, out, err = ssh.exec(command)
@@ -207,3 +232,49 @@ def _validate_remote_script(remote_path: str, settings: Settings) -> str:
 
         log.info(summary)
         return summary
+
+
+def _import_under_safe_mode(
+    command: str,
+    remote_path: str,
+    settings: Settings,
+) -> str:
+    """Run *command* inside a ``/safe-mode`` shell session.
+
+    On success, the change is committed (Ctrl+X). On a ``failure:``
+    line in the import output, the change is reverted (Ctrl+D) and
+    :class:`ImportError` is raised so the caller knows the apply did
+    NOT land. If the SSH session drops mid-import, the router's
+    9-minute auto-revert kicks in -- we don't have any explicit
+    handling for that beyond letting the underlying exception
+    propagate.
+    """
+    # Local import: keeps safe-mode's dependencies (select, etc.) out
+    # of the import path for the common no-safe-mode case.
+    from .safemode_shell import SafeModeError, run_under_safe_mode
+
+    log.info("import: routing through /safe-mode shell")
+
+    with SshSession(settings) as ssh:
+        # Pull the underlying paramiko client out so the shell wrapper
+        # can call invoke_shell() on it.
+        client = ssh._require_connected()  # noqa: SLF001 -- internal access
+        try:
+            success, output = run_under_safe_mode(client, command)
+        except SafeModeError as exc:
+            raise ImportError(
+                f"safe-mode shell protocol error: {exc}; "
+                "the router's 9-minute auto-revert applies if anything "
+                "was partially committed"
+            ) from exc
+
+    if not success:
+        # The revert was attempted; the router has rolled back what
+        # was applied so far.
+        raise ImportError(
+            f"safe-mode: import of {remote_path} failed; router reverted. "
+            f"Output:\n{output}"
+        )
+
+    log.info("  + safe-mode: imported %s (committed)", remote_path)
+    return output

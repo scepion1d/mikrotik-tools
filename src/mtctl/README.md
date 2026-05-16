@@ -5,10 +5,11 @@ paramiko-based SSH/SFTP utility for RouterOS. Six subcommands:
 **backup** (trigger router-side snapshot of state), **export**
 (stream `/export` over SSH stdout to a local file -- read-only,
 cron-safe), **import** (run `/import file-name=...` on the
-router; also `--validate` to probe without executing), and
-**rm** (delete one remote file). Reads connection details from
-`.env`. File transfers always overwrite the destination and
-auto-create missing parent directories.
+router; `--validate` probes without executing, `--safe-mode` wraps
+in RouterOS safe-mode with auto-revert), and **rm** (delete one
+remote file). Reads connection details from `.env`. File transfers
+always overwrite the destination and auto-create missing parent
+directories.
 
 ## Install
 
@@ -191,13 +192,18 @@ rsc diff --old $snap --new .\out\candidate.rsc --check
 ### import
 
 ```text
-mtctl import --src REMOTE [--quiet] [--validate] [--env ENV] [--dry-run] [-v]
+mtctl import --src REMOTE [--quiet] [--validate] [--safe-mode] [--env ENV] [--dry-run] [-v]
 
   --src REMOTE   remote .rsc path (POSIX, relative to flash root)
   --quiet        omit verbose=yes (router won't echo each script line)
   --validate     probe the file on the router (exists / size; :parse for
                  small files) without running /import. Mutually exclusive
                  with --dry-run; intended for `deploy.ps1 -DryRun`.
+  --safe-mode    wrap the /import in RouterOS /safe-mode: commit on success,
+                 revert on failure, 9-minute auto-revert if the SSH session
+                 drops mid-script. Uses an interactive shell (Ctrl+X to
+                 enter / commit; Ctrl+D to revert). Mutually exclusive
+                 with --dry-run and --validate.
   --env ENV      path to .env file (default: walk up from cwd looking for .env)
   --dry-run      report what would happen without touching the router
   -v, --verbose  -v INFO logs (default WARNING); -vv DEBUG
@@ -218,12 +224,32 @@ bundles) get the transport + existence checks only; syntax errors
 would surface at the real `/import`. Used by `deploy.ps1 -DryRun` in
 the upload + validate + rm chain.
 
+`--safe-mode` wraps the apply in RouterOS `/safe-mode`. Two key
+properties:
+
+- **Mid-script failure -> auto-revert.** If any line of the script
+  produces `failure:`, the wrapper sends Ctrl+D; the router rolls back
+  every change made since safe-mode entered. The CLI exits 1.
+- **Session drop -> auto-revert (9 min).** If the SSH connection dies
+  mid-import (cable bump, VPN reconnect, accidentally-applied firewall
+  rule that kills your own session), the router holds the changes for
+  9 minutes then reverts. No manual rollback needed.
+
+Implementation: opens a `paramiko.invoke_shell()` interactive console
+(not `exec_command` -- safe-mode is bound to the console session that
+entered it). Sends Ctrl+X to enter, the import command, then Ctrl+X
+again on success or Ctrl+D on failure. See
+[`mtctl/safemode_shell.py`](mtctl/safemode_shell.py) for the protocol.
+
 Examples:
 
 ```powershell
 # Stage and apply a rollforward patch.
 mtctl upload --src .\out\deploy\<ts>\up.rsc --dst deployment/<ts>/up.rsc
 mtctl import --src deployment/<ts>/up.rsc -v
+
+# With safe-mode: auto-rollback on failure or session drop.
+mtctl import --src deployment/<ts>/up.rsc --safe-mode -v
 
 # Dry run: print the command without touching the router.
 mtctl import --src deployment/<ts>/up.rsc --dry-run
