@@ -169,3 +169,84 @@ def test_double_quote_in_remote_path_rejected() -> None:
     with pytest.raises(ImportError, match="double quotes"):
         run_import('weird"name.rsc', _settings())
     assert FakeSshSession.last is None
+
+
+# --- validate ---------------------------------------------------------------
+
+
+def _install_session_with_results(results: list[tuple[int, str, str]]) -> "FakeSshSession":
+    """Helper: install a FakeSshSession that returns *results* from exec()."""
+    sess = FakeSshSession(_settings())
+    sess.exec_results = results
+    FakeSshSession.last = sess
+    importer_mod.SshSession = (lambda _s: sess)  # type: ignore[assignment]
+    return sess
+
+
+def test_validate_file_exists_returns_summary() -> None:
+    """File present + 16 KB -> summary mentions size, :parse skipped."""
+    sess = _install_session_with_results([
+        (0, "*1\n", ""),         # /file find -> internal id
+        (0, "16901\n", ""),      # /file get size
+    ])
+    try:
+        out = run_import(
+            "deployment/x/up.rsc", _settings(), validate=True,
+        )
+    finally:
+        importer_mod.SshSession = FakeSshSession  # type: ignore[assignment]
+
+    assert "validated:" in out
+    assert "16901 bytes" in out
+    assert ":parse skipped" in out  # file is bigger than _PARSE_PROBE_LIMIT
+    # /import was NOT invoked -- only the two probe commands.
+    assert all("/import" not in c for c in sess.exec_calls)
+
+
+def test_validate_file_missing_raises() -> None:
+    """`/file find` returning empty -> file not on flash -> ImportError."""
+    _install_session_with_results([
+        (0, "\n", ""),  # empty stdout = no rows = file not found
+    ])
+    try:
+        with pytest.raises(ImportError, match="file not found on router"):
+            run_import("missing.rsc", _settings(), validate=True)
+    finally:
+        importer_mod.SshSession = FakeSshSession  # type: ignore[assignment]
+
+
+def test_validate_small_file_runs_parse_probe_ok() -> None:
+    """File under the parse threshold -> :parse runs and reports ok."""
+    sess = _install_session_with_results([
+        (0, "*5\n", ""),         # find
+        (0, "1024\n", ""),       # size (under 3500)
+        (0, "parse-ok\n", ""),   # :do {:parse ...} -> parse-ok
+    ])
+    try:
+        out = run_import("small.rsc", _settings(), validate=True)
+    finally:
+        importer_mod.SshSession = FakeSshSession  # type: ignore[assignment]
+
+    assert ":parse OK" in out
+    # Three probes: find, size, parse. No /import.
+    assert len(sess.exec_calls) == 3
+
+
+def test_validate_small_file_parse_failure_raises() -> None:
+    """Router's :parse returning `parse-failed` raises ImportError."""
+    _install_session_with_results([
+        (0, "*9\n", ""),
+        (0, "512\n", ""),
+        (0, "parse-failed\n", ""),
+    ])
+    try:
+        with pytest.raises(ImportError, match=":parse failed"):
+            run_import("broken.rsc", _settings(), validate=True)
+    finally:
+        importer_mod.SshSession = FakeSshSession  # type: ignore[assignment]
+
+
+def test_validate_and_dry_run_are_mutually_exclusive() -> None:
+    with pytest.raises(ImportError, match="mutually exclusive"):
+        run_import("x.rsc", _settings(), dry_run=True, validate=True)
+    assert FakeSshSession.last is None

@@ -1,12 +1,13 @@
 """Command-line entry point for mtctl.
 
-Five subcommands::
+Six subcommands::
 
     mtctl upload   --src LOCAL  --dst REMOTE  [--env ENV] [--dry-run] [-v]
     mtctl download --src REMOTE --dst LOCAL   [--env ENV] [--dry-run] [-v]
     mtctl backup   [--password PW | --no-encrypt] [--env ENV] [--dry-run] [-v]
     mtctl export   --dst LOCAL  [--no-sensitive] [--env ENV] [--dry-run] [-v]
-    mtctl import   --src REMOTE [--quiet] [--env ENV] [--dry-run] [-v]
+    mtctl import   --src REMOTE [--quiet|--validate] [--env ENV] [--dry-run] [-v]
+    mtctl rm       --path REMOTE              [--env ENV] [--dry-run] [-v]
 
 ``upload`` and ``download`` require ``--src`` and ``--dst``. The
 destination's parent directory is created if missing; an existing file
@@ -16,7 +17,10 @@ stdout. ``export`` is a lightweight read-only alternative -- it streams
 ``/export show-sensitive`` to a local file via SSH stdout without
 touching the router's flash. ``import`` runs
 ``/import file-name=<src>`` on the router against a previously-uploaded
-``.rsc`` script.
+``.rsc`` script; ``--validate`` probes the file (existence, size,
+optional ``:parse`` on small files) without executing it. ``rm``
+deletes one remote file via SFTP (the cleanup half of the
+upload/probe/cleanup chain ``deploy.ps1 -DryRun`` uses).
 """
 
 from __future__ import annotations
@@ -31,6 +35,7 @@ from .config import EnvError, load_env
 from .deployer import DeployError, download, upload
 from .export import ExportError, export_config
 from .importer import ImportError as RouterImportError, run_import
+from .remove import RemoveError, remove_remote
 from .sftp import SftpError
 from .ssh import SshError
 
@@ -39,7 +44,7 @@ from .ssh import SshError
 # Anything else propagates as an uncaught traceback (programmer error).
 _HANDLED_ERRORS = (
     DeployError, BackupError, ExportError, RouterImportError,
-    SshError, SftpError,
+    RemoveError, SshError, SftpError,
 )
 
 
@@ -58,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
         # argparse with required=False on subparsers prints nothing on
         # bare invocation; make the failure visible.
         print(
-            "mtctl: missing subcommand (upload|download|backup|export|import); use -h",
+            "mtctl: missing subcommand (upload|download|backup|export|import|rm); use -h",
             file=sys.stderr,
         )
         return 2
@@ -113,8 +118,15 @@ def _dispatch(args: argparse.Namespace, settings) -> int:
     if args.command == "import":
         run_import(
             args.src, settings,
-            verbose=not args.quiet, dry_run=args.dry_run,
+            verbose=not args.quiet,
+            dry_run=args.dry_run,
+            validate=args.validate,
         )
+        return 0
+
+    if args.command == "rm":
+        remove_remote(args.path, settings, dry_run=args.dry_run)
+        return 0
         return 0
 
     # pragma: no cover -- argparse keeps choices honest
@@ -137,7 +149,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(
         dest="command",
-        metavar="{upload,download,backup,export,import}",
+        metavar="{upload,download,backup,export,import,rm}",
     )
 
     _add_upload_parser(sub)
@@ -145,6 +157,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     _add_backup_parser(sub)
     _add_export_parser(sub)
     _add_import_parser(sub)
+    _add_rm_parser(sub)
 
     return parser
 
@@ -255,6 +268,32 @@ def _add_import_parser(sub: argparse._SubParsersAction) -> None:
     p.add_argument(
         "--quiet", action="store_true",
         help="omit verbose=yes (router won't echo each script line)",
+    )
+    p.add_argument(
+        "--validate", action="store_true",
+        help=(
+            "probe the file on the router (exists / size; :parse for "
+            "small files) without running /import. Mutually exclusive "
+            "with --dry-run; intended for `deploy.ps1 -DryRun`."
+        ),
+    )
+    _add_common_flags(p)
+
+
+def _add_rm_parser(sub: argparse._SubParsersAction) -> None:
+    p = sub.add_parser(
+        "rm",
+        help="delete a file on the router (SFTP unlink)",
+        description=(
+            "Delete a single remote file via SFTP. Used by "
+            "`deploy.ps1 -DryRun` to clean up the probe upload after "
+            "`mtctl import --validate`. Not recursive; for that, drop "
+            "into SSH and use /file remove."
+        ),
+    )
+    p.add_argument(
+        "--path", required=True,
+        help="remote file path (POSIX, relative to flash root)",
     )
     _add_common_flags(p)
 

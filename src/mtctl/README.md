@@ -1,12 +1,14 @@
 # mtctl
 
-paramiko-based SSH/SFTP utility for RouterOS. Five subcommands:
+paramiko-based SSH/SFTP utility for RouterOS. Six subcommands:
 **upload** (local → router), **download** (router → local),
 **backup** (trigger router-side snapshot of state), **export**
 (stream `/export` over SSH stdout to a local file -- read-only,
-cron-safe), and **import** (run `/import file-name=...` on the
-router). Reads connection details from `.env`. File transfers always
-overwrite the destination and auto-create missing parent directories.
+cron-safe), **import** (run `/import file-name=...` on the
+router; also `--validate` to probe without executing), and
+**rm** (delete one remote file). Reads connection details from
+`.env`. File transfers always overwrite the destination and
+auto-create missing parent directories.
 
 ## Install
 
@@ -59,7 +61,7 @@ the SSH/SFTP layer; otherwise, it's connectivity.
 ## CLI
 
 ```text
-usage: mtctl {upload,download,backup,export,import} ...
+usage: mtctl {upload,download,backup,export,import,rm} ...
 ```
 
 ### upload
@@ -189,10 +191,13 @@ rsc diff --old $snap --new .\out\candidate.rsc --check
 ### import
 
 ```text
-mtctl import --src REMOTE [--quiet] [--env ENV] [--dry-run] [-v]
+mtctl import --src REMOTE [--quiet] [--validate] [--env ENV] [--dry-run] [-v]
 
   --src REMOTE   remote .rsc path (POSIX, relative to flash root)
   --quiet        omit verbose=yes (router won't echo each script line)
+  --validate     probe the file on the router (exists / size; :parse for
+                 small files) without running /import. Mutually exclusive
+                 with --dry-run; intended for `deploy.ps1 -DryRun`.
   --env ENV      path to .env file (default: walk up from cwd looking for .env)
   --dry-run      report what would happen without touching the router
   -v, --verbose  -v INFO logs (default WARNING); -vv DEBUG
@@ -204,6 +209,15 @@ use `mtctl upload` first if it doesn't. RouterOS reports script errors
 on stdout as `failure: ...`; any such line (or a non-zero exit status)
 makes this command exit `1`.
 
+`--validate` is the closest thing RouterOS allows to a "parse without
+execute" check on `/import`. It opens the SSH session, confirms the
+file is on flash via `/file find`, captures its size, and -- for files
+under ~3 KB -- runs `:parse [/file get name=<src> contents]` so the
+router's own parser verifies syntax. Larger files (our typical 16-22 KB
+bundles) get the transport + existence checks only; syntax errors
+would surface at the real `/import`. Used by `deploy.ps1 -DryRun` in
+the upload + validate + rm chain.
+
 Examples:
 
 ```powershell
@@ -213,7 +227,27 @@ mtctl import --src deployment/<ts>/up.rsc -v
 
 # Dry run: print the command without touching the router.
 mtctl import --src deployment/<ts>/up.rsc --dry-run
+
+# Probe: confirm the router accepts the file without applying.
+mtctl upload   --src up.rsc --dst tmp/probe.rsc
+mtctl import   --src tmp/probe.rsc --validate
+mtctl rm       --path tmp/probe.rsc
 ```
+
+### rm
+
+```text
+mtctl rm --path REMOTE [--env ENV] [--dry-run] [-v]
+
+  --path REMOTE  remote file path (POSIX, relative to flash root)
+  --env ENV      path to .env file
+  --dry-run      log without connecting
+  -v, --verbose  -v INFO logs; -vv DEBUG
+```
+
+Delete one remote file via SFTP. Not recursive; for that, drop into
+SSH and use `/file remove`. Primary user is `deploy.ps1 -DryRun`,
+which uploads a probe / runs `--validate` / cleans up via `mtctl rm`.
 
 ## Behaviour
 
