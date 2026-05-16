@@ -1,6 +1,6 @@
 # mikrotik-tools
 
-[![test](https://github.com/scepion1d/mikrotik-tools/actions/workflows/test.yml/badge.svg)](https://github.com/scepion1d/mikrotik-tools/actions/workflows/test.yml)
+[![Tools](https://github.com/scepion1d/mikrotik-tools/actions/workflows/test.yml/badge.svg)](https://github.com/scepion1d/mikrotik-tools/actions/workflows/test.yml)
 
 Two Python tools for working with a MikroTik RouterOS device:
 
