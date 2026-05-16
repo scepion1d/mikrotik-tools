@@ -106,7 +106,7 @@ def load_yaml_profile(
     # or even require pyyaml to be installed for an `.rsc`-only build.
     from rsc.yaml import YamlError, to_rsc_file
 
-    paths = _load_files(profile_dir, vars_dir=vars_dir, suffix=".yaml")
+    paths = load_yaml_profile_paths(profile_dir, vars_dir=vars_dir)
     rendered: list[tuple[str, str]] = []
     for path in paths:
         try:
@@ -118,6 +118,20 @@ def load_yaml_profile(
         # output is the same .rsc either way).
         rendered.append((path.with_suffix(".rsc").name, text))
     return rendered
+
+
+def load_yaml_profile_paths(
+    profile_dir: str | Path,
+    *,
+    vars_dir: str | Path | None = None,
+) -> list[Path]:
+    """Discover the YAML files that :func:`load_yaml_profile` would render.
+
+    Splits the discovery half of :func:`load_yaml_profile` out so other
+    callers (notably ``rsc bundle --validate``) can iterate the same
+    file set without paying for the YAML -> .rsc render.
+    """
+    return _load_files(profile_dir, vars_dir=vars_dir, suffix=".yaml")
 
 
 def _load_files(

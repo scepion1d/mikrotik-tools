@@ -61,6 +61,7 @@ from .loader import (
     concat_named,
     load_profile,
     load_yaml_profile,
+    load_yaml_profile_paths,
 )
 
 __version__ = "0.5.0"
@@ -115,4 +116,5 @@ __all__ = [
     "flatten",
     "load_profile",
     "load_yaml_profile",
+    "load_yaml_profile_paths",
 ]

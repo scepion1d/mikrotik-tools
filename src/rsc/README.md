@@ -37,6 +37,8 @@ rsc bundle --profile rsc\segmented -o my-bundle.rsc      # explicit file path
 rsc bundle --profile rsc\segmented --vars rsc\           # explicit vars folder
 rsc bundle --profile rsc\segmented --no-flatten          # raw concat, skip flatten/parse pipeline
 rsc bundle --profile src\segmented --yaml                # YAML sources (.yaml) under src\
+rsc bundle --profile src\segmented --validate            # validate vs schema.json before render (implies --yaml)
+rsc bundle --profile src\segmented --validate path\to\schema.json   # explicit schema path
 ```
 
 `--vars` defaults to `<profile-parent>`. Every `*.rsc` (or, with
@@ -51,6 +53,14 @@ globbed for `*.yaml`, each file is rendered to `.rsc` text via
 flatten + parse + compact pipeline as the `.rsc` path. The output is
 byte-equivalent to the `.rsc` mode for a correctly authored YAML
 profile (verifiable with `rsc diff --check`).
+
+`--validate` runs a JSON Schema check over every loaded YAML *before*
+rendering. Default schema path is `<vars-dir>/schema.json` (so in this
+repo: `src/schema.json`); pass an explicit path to override
+(`--validate path/to/other-schema.json`). Implies `--yaml`. Errors are
+reported with the file path, JSON-pointer-like key path, and the
+source line number; the renderer aborts with exit 2 if any file
+fails validation, so no partially-good bundle leaks to `-o`.
 
 Diff two `.rsc` configs into a minimal patch (`add` / `set` / `reset` /
 `remove` ops). Two modes:

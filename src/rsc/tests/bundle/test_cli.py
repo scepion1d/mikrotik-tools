@@ -335,3 +335,147 @@ def test_yaml_mode_malformed_yaml_returns_2(
     err = capsys.readouterr().err
     assert "10-bad.yaml" in err
     assert "var" in err  # error mentions the missing var/expr key
+
+
+# --- --validate -------------------------------------------------------------
+
+
+# Minimal schema lives alongside the bundle fixtures so the test is
+# self-contained -- no dependency on the repo's src/schema.json.
+_VALIDATE_SCHEMA = {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "operation": {"type": "string", "enum": ["add", "set"]},
+                    "id": {"type": "string", "pattern": "^iac\\.[\\w.-]+$"},
+                },
+            },
+        },
+    },
+}
+
+
+def _write_schema_next_to_vars(vars_dir: Path) -> Path:
+    """Drop a minimal schema.json into a vars folder for auto-discovery."""
+    import json
+    schema_path = vars_dir / "schema.json"
+    schema_path.write_text(json.dumps(_VALIDATE_SCHEMA), encoding="utf-8")
+    return schema_path
+
+
+def test_validate_auto_discovers_schema_next_to_vars(tmp_path: Path) -> None:
+    """--validate (no arg) finds schema.json next to the vars folder."""
+    repo = tmp_path / "repo"
+    profile = repo / "myprofile"
+    profile.mkdir(parents=True)
+    _write_schema_next_to_vars(repo)
+    (profile / "10-ok.yaml").write_text(
+        "interface:\n  list:\n    - {operation: add, id: iac.list.wan}\n",
+        encoding="utf-8",
+    )
+
+    rc = bundle_main([
+        "--profile", str(profile),
+        "--validate",
+        "-o", str(tmp_path / "out.rsc"),
+    ])
+    assert rc == 0
+    assert (tmp_path / "out.rsc").is_file()
+
+
+def test_validate_explicit_schema_path(tmp_path: Path) -> None:
+    """--validate <path> uses an arbitrary schema location."""
+    profile = tmp_path / "profile"
+    profile.mkdir()
+    schema = tmp_path / "elsewhere" / "my-schema.json"
+    schema.parent.mkdir()
+    import json
+    schema.write_text(json.dumps(_VALIDATE_SCHEMA), encoding="utf-8")
+    (profile / "10-ok.yaml").write_text(
+        "interface:\n  list:\n    - {operation: add, id: iac.list.wan}\n",
+        encoding="utf-8",
+    )
+
+    rc = bundle_main([
+        "--profile", str(profile),
+        "--validate", str(schema),
+        "-o", str(tmp_path / "out.rsc"),
+    ])
+    assert rc == 0
+
+
+def test_validate_catches_schema_violation_with_line_number(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A bad enum value is caught BEFORE render, with a line number."""
+    repo = tmp_path / "repo"
+    profile = repo / "myprofile"
+    profile.mkdir(parents=True)
+    _write_schema_next_to_vars(repo)
+    (profile / "10-bad.yaml").write_text(
+        "interface:\n  list:\n    - operation: addd\n      id: iac.list.wan\n",
+        encoding="utf-8",
+    )
+
+    rc = bundle_main([
+        "--profile", str(profile),
+        "--validate",
+        "-o", str(tmp_path / "out.rsc"),
+    ])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "10-bad.yaml" in err
+    assert "addd" in err
+    # Line numbers should be present so the operator can jump to the
+    # offending line directly.
+    assert "line" in err
+    # The output file should NOT have been created -- validate aborts
+    # before render.
+    assert not (tmp_path / "out.rsc").exists()
+
+
+def test_validate_missing_schema_returns_2(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """No schema next to vars + no explicit path = clear error."""
+    profile = tmp_path / "profile"
+    profile.mkdir()
+    (profile / "10-ok.yaml").write_text(
+        "interface:\n  list:\n    - {id: iac.list.wan}\n",
+        encoding="utf-8",
+    )
+
+    rc = bundle_main([
+        "--profile", str(profile),
+        "--validate",
+        "-o", str(tmp_path / "out.rsc"),
+    ])
+    assert rc == 2
+    assert "schema not found" in capsys.readouterr().err
+
+
+def test_validate_implies_yaml(tmp_path: Path) -> None:
+    """--validate alone (without --yaml) still loads YAML, not .rsc."""
+    repo = tmp_path / "repo"
+    profile = repo / "myprofile"
+    profile.mkdir(parents=True)
+    _write_schema_next_to_vars(repo)
+    (profile / "10-ok.yaml").write_text(
+        "interface:\n  list:\n    - {id: iac.list.wan}\n",
+        encoding="utf-8",
+    )
+
+    # No `--yaml` flag; only `--validate`. Bundle should still succeed
+    # by treating the profile as YAML.
+    rc = bundle_main([
+        "--profile", str(profile),
+        "--validate",
+        "-o", str(tmp_path / "out.rsc"),
+    ])
+    assert rc == 0

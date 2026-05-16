@@ -69,6 +69,7 @@ from .loader import (
     concat_named,
     load_profile,
     load_yaml_profile,
+    load_yaml_profile_paths,
 )
 
 
@@ -117,6 +118,20 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--validate",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="SCHEMA",
+        help=(
+            "validate every loaded *.yaml against a JSON Schema before "
+            "rendering. Implies --yaml. With no value: auto-discover "
+            "schema.json next to the vars folder (e.g. src/schema.json "
+            "for src/<profile>/). With an explicit path: use that file. "
+            "On any violation, exits 2 with line-numbered errors."
+        ),
+    )
+    parser.add_argument(
         "-o", "--out",
         type=Path,
         default=None,
@@ -146,8 +161,16 @@ def main(argv: list[str] | None = None) -> int:
 
     vars_dir = _resolve_vars_dir(args.vars, profile)
 
+    # --validate implies --yaml (only YAML sources have a schema).
+    use_yaml = args.yaml or args.validate is not None
+
+    if args.validate is not None:
+        rc = _run_validate(args.validate, profile, vars_dir)
+        if rc != 0:
+            return rc
+
     try:
-        if args.yaml:
+        if use_yaml:
             pairs = load_yaml_profile(profile, vars_dir=vars_dir)
             raw = concat_named(pairs)
         else:
@@ -198,6 +221,59 @@ def _resolve_vars_dir(explicit: Path | None, profile: Path) -> Path | None:
         candidate = profile.parent
         return candidate if candidate.is_dir() else None
     return explicit
+
+
+def _run_validate(
+    explicit_schema: str,
+    profile: Path,
+    vars_dir: Path | None,
+) -> int:
+    """Validate every YAML the loader would pick up.
+
+    Schema discovery: ``--validate <path>`` uses *path* verbatim.
+    ``--validate`` with no value looks for ``schema.json`` next to the
+    vars folder (or, if no vars folder, the profile's parent). Returns
+    0 on success, 2 on any failure (parse error, schema not found,
+    schema violation in any file).
+    """
+    from rsc.yaml import SchemaValidationError, validate_file
+
+    # Schema discovery: explicit path -> use it; empty -> auto-locate.
+    if explicit_schema:
+        schema_path = Path(explicit_schema)
+    else:
+        anchor = vars_dir if vars_dir is not None else profile.parent
+        schema_path = anchor / "schema.json"
+    if not schema_path.is_file():
+        print(
+            f"rsc bundle: schema not found: {schema_path}\n"
+            f"  pass --validate <path/to/schema.json> explicitly, or\n"
+            f"  place schema.json next to your vars folder.",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        files = load_yaml_profile_paths(profile, vars_dir=vars_dir)
+    except LoaderError as exc:
+        print(f"rsc bundle: {exc}", file=sys.stderr)
+        return 2
+
+    failures = 0
+    for path in files:
+        try:
+            validate_file(path, schema_path)
+        except SchemaValidationError as exc:
+            print(f"rsc bundle: {exc}", file=sys.stderr)
+            failures += 1
+    if failures:
+        print(
+            f"rsc bundle: --validate found problems in {failures} file(s); "
+            "aborting before render.",
+            file=sys.stderr,
+        )
+        return 2
+    return 0
 
 
 def _resolve_out_path(out: Path | None, profile: Path) -> Path:

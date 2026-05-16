@@ -21,10 +21,13 @@ classifiers = [
     "Typing :: Typed",
 ]
 # Runtime deps:
-#   pyyaml -- used by `rsc.yaml` to parse the YAML profile sources behind
-#   the `rsc bundle --yaml` opt-in. Parser + diff still have zero deps.
+#   pyyaml     -- `rsc.yaml` parses YAML profile sources for `rsc bundle --yaml`.
+#   jsonschema -- `rsc.yaml.validate` checks YAML against src/schema.json for the
+#                 optional `rsc bundle --yaml --validate` opt-in.
+# Parser + diff still have zero deps.
 dependencies = [
     "pyyaml>=6.0",
+    "jsonschema>=4.0",
 ]
 
 [dependency-groups]

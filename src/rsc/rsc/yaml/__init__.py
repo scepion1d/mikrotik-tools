@@ -18,20 +18,34 @@ the bundler will reformat anyway.
 
 Public API
 ----------
-- :func:`to_rsc`        -- render a YAML string to ``.rsc`` text
-- :func:`to_rsc_file`   -- read + render a ``.yaml`` file from disk
-- :class:`YamlError`    -- raised on malformed YAML or schema violations
+- :func:`to_rsc`                 -- render a YAML string to ``.rsc`` text
+- :func:`to_rsc_file`            -- read + render a ``.yaml`` file from disk
+- :class:`YamlError`             -- raised on malformed YAML or render errors
+- :func:`validate_file`          -- validate a YAML file against ``src/schema.json``
+- :func:`validate_text`          -- validate YAML text + line-numbered errors
+- :func:`validate`               -- validate an already-parsed mapping
+- :class:`SchemaValidationError` -- raised on any schema violation
 """
 
 from __future__ import annotations
 
 from .converter import YamlError, to_rsc, to_rsc_file
+from .validate import (
+    SchemaValidationError,
+    validate,
+    validate_file,
+    validate_text,
+)
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
+    "SchemaValidationError",
     "YamlError",
     "__version__",
     "to_rsc",
     "to_rsc_file",
+    "validate",
+    "validate_file",
+    "validate_text",
 ]
