@@ -7,6 +7,7 @@ subcommands plus a shared parser library.
 rsc bundle  --profile <folder> [--yaml] [...]  # merge profile -> single minimal .rsc
 rsc diff    --old A.rsc --new B.rsc            # diff two configs into a runnable patch
 rsc reverse --src live.rsc -o src/profile/     # convert .rsc back to YAML profile sources
+rsc lint    --src live.rsc | --profile <folder> [--yaml]   # semantic check for duplicate ids / dangling refs
 ```
 
 The optional `--yaml` flag treats the profile + vars folders as YAML
@@ -107,6 +108,45 @@ rsc reverse --src live.rsc -o src\myrouter\
 git add src\myrouter\
 ```
 
+### `rsc lint`
+
+Semantic checks against a parsed config. Catches the structural problems
+that make `/import` blow up at runtime: duplicate `iac.*` ids, dangling
+cross-references, orphan DHCP-pool wiring.
+
+```powershell
+rsc lint --src live.rsc                                # lint a single .rsc file
+rsc lint --profile src\segmentedx3 --yaml              # bundle YAML, then lint
+rsc lint --profile rsc\basic                          # bundle .rsc, then lint
+rsc lint --profile src\segmentedx3 --yaml -v          # also print clean-result line
+```
+
+Exit codes:
+
+- `0` -- no issues, or only warnings.
+- `1` -- at least one error-severity issue.
+- `2` -- setup error (bad path, bundle failure, empty config).
+
+Checks today:
+
+| Code      | Severity | What it catches                                                          |
+| --------- | -------- | ------------------------------------------------------------------------ |
+| `LINT001` | error    | Two items in the same menu sharing one `iac.*` token                     |
+| `LINT002` | error    | A prop like `interface=iac.bridge.foo` where no `iac.bridge.foo` exists  |
+| `LINT005` | error    | `/ip/dhcp-server address-pool=iac.pool.X` where no matching `/ip/pool` defined |
+
+Sample output for a broken profile:
+
+```
+rsc lint: 3 issue(s) -- 3 error(s), 0 warning(s)
+  LINT001 error: /interface/list[1] (iac.list.wan): duplicate id 'iac.list.wan' (appears at positions [0, 1] in this menu)
+  LINT002 error: /ip/address[0] (iac.addr.lan): property interface='iac.bridge.missing' references an iac.* name not defined in any of /interface/ethernet, /interface/vlan, /interface/bridge, /interface/wifi
+  LINT005 error: /ip/dhcp-server[0] (iac.dhcp.lan): address-pool='iac.pool.gone' doesn't match any /ip/pool entry; the DHCP server will start but lease nothing
+```
+
+Deferred (need pre-flatten text; not yet wired): `LINT003` (unused
+`:global`), `LINT004` (undefined `$varname` ref).
+
 ## Library
 
 ```python
@@ -133,6 +173,12 @@ rsc_text = to_rsc_file("src/segmented/40-firewall.yaml")
 # .rsc -> YAML (the inverse; used by `rsc reverse`).
 from rsc.yaml import to_yaml_files
 written = to_yaml_files(parse_file("live.rsc"), "src/new_profile/")
+
+# Lint a parsed config.
+from rsc.lint import lint, format_issues, Severity
+issues = lint(parse_file("live.rsc"))
+print(format_issues(issues))
+has_error = any(i.severity is Severity.ERROR for i in issues)
 ```
 
 ## Architecture
@@ -145,6 +191,7 @@ Four subpackages under one umbrella, each independently importable:
 | `rsc.bundle`   | Profile-folder loader + flattener + compact emitter. CLI: `rsc bundle`. |
 | `rsc.diff`     | Per-menu differ + patch emitter + in-memory verifier. CLI: `rsc diff`. |
 | `rsc.yaml`     | YAML → `.rsc` renderer + `.rsc` → YAML reverser + JSON Schema validator. CLIs: `rsc bundle --yaml`, `rsc bundle --validate`, `rsc reverse`. |
+| `rsc.lint`     | Semantic checks on a parsed config (duplicate ids, dangling refs, orphan pool refs). CLI: `rsc lint`. |
 
 The top-level `rsc.cli.main` is a thin dispatcher:
 
@@ -152,6 +199,7 @@ The top-level `rsc.cli.main` is a thin dispatcher:
 rsc bundle  ...  ->   rsc.bundle.cli.main(<rest>)
 rsc diff    ...  ->   rsc.diff.cli.main(<rest>)
 rsc reverse ...  ->   rsc.yaml.reverse_cli.main(<rest>)
+rsc lint    ...  ->   rsc.lint_cli.main(<rest>)
 ```
 
 Each sub-CLI keeps its own argparser and `--help`. No single merged
