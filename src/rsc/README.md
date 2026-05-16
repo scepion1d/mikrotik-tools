@@ -10,10 +10,9 @@ rsc reverse --src live.rsc -o src/profile/     # convert .rsc back to YAML profi
 rsc lint    --src live.rsc | --profile <folder> [--yaml]   # semantic check for duplicate ids / dangling refs
 ```
 
-The optional `--yaml` flag treats the profile + vars folders as YAML
-sources (`*.yaml`) and renders them to `.rsc` text via the
-[`rsc.yaml`](rsc/yaml/) subpackage before the normal bundle pipeline
-runs. The output is the same `.rsc` either way.
+The optional `--yaml` flag renders YAML folders to `.rsc` via the
+[`rsc.yaml`](rsc/yaml/) subpackage before bundling; output is
+byte-equivalent to `.rsc` mode.
 
 ## Install
 

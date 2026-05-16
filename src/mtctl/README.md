@@ -38,16 +38,10 @@ LAN path. Anything that intercepts or tunnels local traffic can prevent
 the SSH banner exchange and surface as `ssh connect failed`,
 `Error reading SSH protocol banner`, or a plain timeout. Common culprits:
 
-- **Local firewall** (Windows Defender Firewall, third-party endpoint
-  protection) blocking outbound SSH or the router's reply.
-- **Corporate / personal VPN** routing `192.168.0.0/16` (or your
-  router's subnet specifically) over the tunnel instead of the LAN.
-- **Microsoft Entra Global Secure Access** (or similar SASE/ZTNA agents)
-  capturing all traffic via its forwarding profile -- LAN destinations
-  must be added to the **bypass** list, otherwise packets are sent to
-  the cloud edge and dropped.
-- **Split-DNS / VPN DNS** resolving the router's hostname to an internal
-  address you can't reach from the current network.
+- **Local firewall** blocking outbound SSH or the router's reply.
+- **VPN** routing the router's subnet over the tunnel instead of the LAN.
+- **SASE/ZTNA agents** (e.g. Microsoft Entra Global Secure Access) capturing all traffic; add LAN destinations to the bypass list.
+- **Split-DNS / VPN DNS** resolving the router's hostname to an unreachable internal address.
 
 Quick checks before suspecting the tool:
 
@@ -165,9 +159,7 @@ nothing to the router's flash**. Use this when:
   without altering router state.
 - Pulling a one-off config view for a manual diff.
 
-When you need a recoverable snapshot (e.g. before deploy), use
-`backup` -- its `.backup` binary is the only thing `/system/backup
-load` can fully restore.
+For a restorable snapshot, use `backup` instead.
 
 Examples:
 
@@ -215,14 +207,11 @@ use `mtctl upload` first if it doesn't. RouterOS reports script errors
 on stdout as `failure: ...`; any such line (or a non-zero exit status)
 makes this command exit `1`.
 
-`--validate` is the closest thing RouterOS allows to a "parse without
-execute" check on `/import`. It opens the SSH session, confirms the
-file is on flash via `/file find`, captures its size, and -- for files
-under ~3 KB -- runs `:parse [/file get name=<src> contents]` so the
-router's own parser verifies syntax. Larger files (our typical 16-22 KB
-bundles) get the transport + existence checks only; syntax errors
-would surface at the real `/import`. Used by `deploy.ps1 -DryRun` in
-the upload + validate + rm chain.
+`--validate` is the closest RouterOS allows to a parse-without-execute
+check. Confirms the file exists via `/file find`, captures its size,
+and for files under ~3 KB runs `:parse [/file get name=<src> contents]`
+so the router's own parser verifies syntax. Larger files get transport
++ existence checks only. Used by `deploy.ps1 -DryRun`.
 
 `--safe-mode` wraps the apply in RouterOS `/safe-mode`. Two key
 properties:
@@ -231,14 +220,10 @@ properties:
   produces `failure:`, the wrapper sends Ctrl+D; the router rolls back
   every change made since safe-mode entered. The CLI exits 1.
 - **Session drop -> auto-revert (9 min).** If the SSH connection dies
-  mid-import (cable bump, VPN reconnect, accidentally-applied firewall
-  rule that kills your own session), the router holds the changes for
-  9 minutes then reverts. No manual rollback needed.
+  mid-import, the router holds the changes for 9 minutes then reverts.
 
-Implementation: opens a `paramiko.invoke_shell()` interactive console
-(not `exec_command` -- safe-mode is bound to the console session that
-entered it). Sends Ctrl+X to enter, the import command, then Ctrl+X
-again on success or Ctrl+D on failure. See
+Uses an interactive shell (`paramiko.invoke_shell()`) since `/safe-mode`
+is bound to the console session that entered it. See
 [`mtctl/safemode_shell.py`](mtctl/safemode_shell.py) for the protocol.
 
 Examples:

@@ -7,8 +7,6 @@ Two Python tools for working with a MikroTik RouterOS device:
 | [`rsc`](src/rsc/)              | **Script processing.** Parser library + `bundle`, `diff`, `reverse`, `lint` subcommands. |
 | [`mtctl`](src/mtctl/)          | **Router control.** SSH/SFTP: upload, download, backup, export, import (`--validate` / `--safe-mode`), rm. |
 
-`rsc` is offline / read-only; `mtctl` talks to the device.
-
 ## Layout
 
 ```
@@ -123,7 +121,7 @@ uv run pytest -q --cov          # tool-local coverage report
 
 ## Status
 
-| Tool   | State                                                                                                           |
-| ------ | --------------------------------------------------------------------------------------------------------------- |
-| `rsc`  | ✅ stable; `bundle` (`--yaml` source mode + `--validate` JSON-Schema check), `diff` (single + roundtrip), `reverse` (.rsc → YAML), `lint` (duplicate ids, dangling refs, orphan pool wiring) all working. |
-| `mtctl`| ✅ stable; SFTP `upload` / `download` + router-side `backup` (write to flash) + read-only `export` (stream `/export` over SSH stdout, cron-safe) + `import` (with `--validate` for router-side probe and `--safe-mode` for auto-rollback) + `rm` (cleanup). |
+| Tool   | State                                                                       |
+| ------ | --------------------------------------------------------------------------- |
+| `rsc`  | ✅ stable: bundle, diff, reverse, lint. See [README](src/rsc/README.md).    |
+| `mtctl`| ✅ stable: upload, download, backup, export, import, rm. See [README](src/mtctl/README.md). |
