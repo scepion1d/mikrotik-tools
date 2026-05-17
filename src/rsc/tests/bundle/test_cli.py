@@ -369,14 +369,17 @@ def _write_schema_next_to_vars(vars_dir: Path) -> Path:
     return schema_path
 
 
-def test_validate_auto_discovers_schema_next_to_vars(tmp_path: Path) -> None:
-    """--validate (no arg) finds schema.json next to the vars folder."""
+def test_validate_uses_bundled_schema_in_memory(tmp_path: Path) -> None:
+    """--validate (no arg) uses the schema bundled inside rsc.schema.
+
+    No disk lookup, no schema file written next to the vars folder.
+    """
     repo = tmp_path / "repo"
     profile = repo / "myprofile"
     profile.mkdir(parents=True)
-    _write_schema_next_to_vars(repo)
+    # Authored against the real bundled schema (item_interface_list).
     (profile / "10-ok.yaml").write_text(
-        "interface:\n  list:\n    - {operation: add, id: iac.list.wan}\n",
+        "interface:\n  list:\n    - {operation: add, id: iac.list.wan, name: iac.list.wan}\n",
         encoding="utf-8",
     )
 
@@ -418,6 +421,7 @@ def test_validate_catches_schema_violation_with_line_number(
     profile = repo / "myprofile"
     profile.mkdir(parents=True)
     _write_schema_next_to_vars(repo)
+    schema_path = repo / "schema.json"
     (profile / "10-bad.yaml").write_text(
         "interface:\n  list:\n    - operation: addd\n      id: iac.list.wan\n",
         encoding="utf-8",
@@ -425,7 +429,7 @@ def test_validate_catches_schema_violation_with_line_number(
 
     rc = bundle_main([
         "--profile", str(profile),
-        "--validate",
+        "--validate", str(schema_path),
         "-o", str(tmp_path / "out.rsc"),
     ])
     assert rc == 2
@@ -440,10 +444,10 @@ def test_validate_catches_schema_violation_with_line_number(
     assert not (tmp_path / "out.rsc").exists()
 
 
-def test_validate_missing_schema_returns_2(
+def test_validate_missing_explicit_schema_returns_2(
     tmp_path: Path, capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """No schema next to vars + no explicit path = clear error."""
+    """--validate <missing-path> = clear error, exit 2."""
     profile = tmp_path / "profile"
     profile.mkdir()
     (profile / "10-ok.yaml").write_text(
@@ -453,7 +457,7 @@ def test_validate_missing_schema_returns_2(
 
     rc = bundle_main([
         "--profile", str(profile),
-        "--validate",
+        "--validate", str(tmp_path / "no-such.json"),
         "-o", str(tmp_path / "out.rsc"),
     ])
     assert rc == 2
@@ -465,14 +469,13 @@ def test_validate_implies_yaml(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     profile = repo / "myprofile"
     profile.mkdir(parents=True)
-    _write_schema_next_to_vars(repo)
     (profile / "10-ok.yaml").write_text(
-        "interface:\n  list:\n    - {id: iac.list.wan}\n",
+        "interface:\n  list:\n    - {id: iac.list.wan, name: iac.list.wan}\n",
         encoding="utf-8",
     )
 
     # No `--yaml` flag; only `--validate`. Bundle should still succeed
-    # by treating the profile as YAML.
+    # by treating the profile as YAML (using the bundled schema).
     rc = bundle_main([
         "--profile", str(profile),
         "--validate",

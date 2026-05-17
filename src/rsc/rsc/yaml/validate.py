@@ -1,17 +1,19 @@
-"""Validate a parsed YAML doc against ``src/schema.json``.
+"""Validate a parsed YAML doc against the rsc JSON Schema.
 
 Public surface
 --------------
 - :func:`validate`            -- validate a parsed mapping (dict).
 - :func:`validate_text`       -- parse YAML text + validate, line numbers in errors.
 - :func:`validate_file`       -- read a file + validate, file path in errors.
+- :func:`bundled_schema`      -- return the schema bundled inside :mod:`rsc.schema`.
 - :class:`SchemaValidationError` -- raised on any schema violation.
 
-The schema lives at ``src/schema.json`` in the parent IaC repo, not in
-this package -- it's part of the *authoring layer*, not the rsc tool's
-internals. Callers pass the schema path explicitly (the bundle CLI
-auto-discovers it relative to the profile folder; see
-:func:`rsc.bundle.cli`).
+The schema itself ships *inside* this package -- see :mod:`rsc.schema`
+for the fragment set and :func:`rsc.schema.bundle`. Pass ``None`` as
+the schema path to :func:`validate_file` (or call :func:`bundled_schema`
+directly) to use the in-memory bundle without touching the disk. Pass
+an explicit path to override (e.g. a downstream repo that ships its
+own schema variant).
 
 Why a separate module
 ---------------------
@@ -82,22 +84,46 @@ def validate_text(yaml_text: str, schema: dict[str, Any]) -> None:
         raise SchemaValidationError(_format_errors(errors, line_map))
 
 
-def validate_file(path: str | Path, schema_path: str | Path) -> None:
-    """Read a YAML file and validate against the schema at *schema_path*.
+def bundled_schema() -> dict[str, Any]:
+    """Return the JSON Schema bundled inside :mod:`rsc.schema`.
 
-    Both paths are reported in error messages so the caller can locate
-    the problem without piecing the context together.
+    Built in-memory from the fragment set shipped with the wheel --
+    no disk I/O against the consumer repo. Lets callers validate
+    without first running ``rsc schema --out ...``.
+    """
+    # Local import to keep `rsc.yaml.validate` import-light for callers
+    # that never validate (e.g. plain `rsc bundle` without --validate).
+    from rsc.schema import bundle as _bundle
+
+    return _bundle()
+
+
+def validate_file(path: str | Path, schema_path: str | Path | None = None) -> None:
+    """Read a YAML file and validate against a JSON Schema.
+
+    *schema_path* selects the schema source:
+
+    - ``None``  -- use :func:`bundled_schema` (the in-memory bundle
+                   from :mod:`rsc.schema`). This is the default.
+    - a path    -- load and use the schema at that path verbatim.
+
+    Both the YAML path and (when set) the schema path are reported in
+    error messages so the caller can locate the problem without
+    piecing the context together.
     """
     p = Path(path)
-    sp = Path(schema_path)
     try:
         yaml_text = p.read_text(encoding="utf-8")
     except OSError as exc:
         raise SchemaValidationError(f"cannot read {p}: {exc}") from exc
-    try:
-        schema = json.loads(sp.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise SchemaValidationError(f"cannot load schema {sp}: {exc}") from exc
+    if schema_path is None:
+        schema = bundled_schema()
+    else:
+        sp = Path(schema_path)
+        try:
+            schema = json.loads(sp.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise SchemaValidationError(f"cannot load schema {sp}: {exc}") from exc
     try:
         validate_text(yaml_text, schema)
     except SchemaValidationError as exc:

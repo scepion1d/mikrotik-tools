@@ -22,8 +22,9 @@ classifiers = [
 ]
 # Runtime deps:
 #   pyyaml     -- `rsc.yaml` parses YAML profile sources for `rsc bundle --yaml`.
-#   jsonschema -- `rsc.yaml.validate` checks YAML against src/schema.json for the
-#                 optional `rsc bundle --yaml --validate` opt-in.
+#   jsonschema -- `rsc.yaml.validate` checks YAML against the JSON Schema
+#                 bundled inside `rsc.schema` (in-memory) for the optional
+#                 `rsc bundle --yaml --validate` opt-in.
 # Parser + diff still have zero deps.
 dependencies = [
     "pyyaml>=6.0",
@@ -61,3 +62,4 @@ rsc = ["py.typed"]
 "rsc.bundle" = ["py.typed"]
 "rsc.diff" = ["py.typed"]
 "rsc.yaml" = ["py.typed"]
+"rsc.schema" = ["*.json"]

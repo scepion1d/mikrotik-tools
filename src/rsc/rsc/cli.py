@@ -23,6 +23,7 @@ _SUBCOMMANDS = {
     "diff":    ("rsc.diff.cli",         "main"),
     "reverse": ("rsc.yaml.reverse_cli", "main"),
     "lint":    ("rsc.lint_cli",         "main"),
+    "schema":  ("rsc.schema.cli",       "main"),
 }
 
 
@@ -52,12 +53,13 @@ def main(argv: list[str] | None = None) -> int:
 def _print_usage(stream=None) -> None:
     out = stream or sys.stdout
     print(
-        "usage: rsc {bundle,diff,reverse,lint} ...\n"
+        "usage: rsc {bundle,diff,reverse,lint,schema} ...\n"
         "\n"
         "  bundle   merge a flat RouterOS profile folder into one minimal .rsc\n"
         "  diff     diff two .rsc configs into a runnable patch\n"
         "  reverse  convert an .rsc back to YAML profile sources (src/<profile>/)\n"
         "  lint     check a .rsc or profile for duplicate ids / dangling refs\n"
+        "  schema   write the bundled YAML profile JSON Schema to a file or stdout\n"
         "\n"
         "Run 'rsc <subcommand> --help' for subcommand options.",
         file=out,

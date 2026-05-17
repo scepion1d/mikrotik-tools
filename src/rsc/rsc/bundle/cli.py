@@ -125,10 +125,10 @@ def main(argv: list[str] | None = None) -> int:
         metavar="SCHEMA",
         help=(
             "validate every loaded *.yaml against a JSON Schema before "
-            "rendering. Implies --yaml. With no value: auto-discover "
-            "schema.json next to the vars folder (e.g. src/schema.json "
-            "for src/<profile>/). With an explicit path: use that file. "
-            "On any violation, exits 2 with line-numbered errors."
+            "rendering. Implies --yaml. With no value: use the schema "
+            "bundled inside the rsc package (no disk lookup). With an "
+            "explicit path: load and use that file. On any violation, "
+            "exits 2 with line-numbered errors."
         ),
     )
     parser.add_argument(
@@ -230,28 +230,28 @@ def _run_validate(
 ) -> int:
     """Validate every YAML the loader would pick up.
 
-    Schema discovery: ``--validate <path>`` uses *path* verbatim.
-    ``--validate`` with no value looks for ``schema.json`` next to the
-    vars folder (or, if no vars folder, the profile's parent). Returns
-    0 on success, 2 on any failure (parse error, schema not found,
+    Schema discovery: ``--validate <path>`` loads *path* from disk.
+    ``--validate`` with no value uses the schema bundled inside the
+    :mod:`rsc.schema` package (in-memory, no disk lookup). Returns 0
+    on success, 2 on any failure (parse error, schema not found,
     schema violation in any file).
     """
     from rsc.yaml import SchemaValidationError, validate_file
 
-    # Schema discovery: explicit path -> use it; empty -> auto-locate.
+    # Schema discovery: explicit path -> load from disk; empty -> use
+    # the bundle shipped inside the rsc package.
     if explicit_schema:
-        schema_path = Path(explicit_schema)
+        schema_path: Path | None = Path(explicit_schema)
+        if not schema_path.is_file():
+            print(
+                f"rsc bundle: schema not found: {schema_path}\n"
+                f"  pass a different --validate <path>, or drop the path "
+                f"to use the bundled rsc schema.",
+                file=sys.stderr,
+            )
+            return 2
     else:
-        anchor = vars_dir if vars_dir is not None else profile.parent
-        schema_path = anchor / "schema.json"
-    if not schema_path.is_file():
-        print(
-            f"rsc bundle: schema not found: {schema_path}\n"
-            f"  pass --validate <path/to/schema.json> explicitly, or\n"
-            f"  place schema.json next to your vars folder.",
-            file=sys.stderr,
-        )
-        return 2
+        schema_path = None
 
     try:
         files = load_yaml_profile_paths(profile, vars_dir=vars_dir)

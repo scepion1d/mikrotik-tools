@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Schema fragment (menu_user.json). Merged into src/schema.json by src/schema/build.py. Do not load directly -- cross-fragment $ref uses '#/definitions/...' against the bundled output.",
+  "definitions": {
+    "menu_user": {
+      "description": "/user -- router user accounts. Either a plain list of user rows, or an object with `_items` plus `group`, `ssh-keys`, and `aaa` sub-menus.",
+      "if": {
+        "type": "array"
+      },
+      "then": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/item_user"
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_user"
+            }
+          },
+          "description": {
+            "$ref": "#/definitions/description"
+          },
+          "group": {
+            "$ref": "#/definitions/menu_generic"
+          },
+          "ssh-keys": {
+            "$ref": "#/definitions/menu_generic"
+          },
+          "aaa": {
+            "$ref": "#/definitions/menu_generic"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "item_user": {
+      "type": "object",
+      "description": "/user -- a router user. Built-in `admin` is addressed via `set [find name=admin]`.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "set",
+          "description": "`set` updates the user matched by `filter`; `add` creates a new user. Example: `set`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find name=admin]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.user.admin`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form comment appended after `id` in the RouterOS comment field. Example: `\"primary operator\"`."
+        },
+        "name": {
+          "type": "string",
+          "description": "Login name. Example: `ops`."
+        },
+        "group": {
+          "type": "string",
+          "description": "RouterOS user group granting permissions. Example: `full`."
+        },
+        "password": {
+          "type": "string",
+          "description": "Plaintext password; prefer a `$NAME` reference to a secret. Example: `$ADMIN_PASSWORD`."
+        },
+        "address": {
+          "type": "string",
+          "description": "Comma-separated CIDRs allowed to authenticate as this user. Example: `10.0.0.0/24,192.168.88.0/24`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the user cannot log in. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

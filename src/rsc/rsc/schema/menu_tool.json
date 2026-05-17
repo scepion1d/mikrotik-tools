@@ -1,0 +1,192 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Schema fragment (menu_tool.json). Merged into src/schema.json by src/schema/build.py. Do not load directly -- cross-fragment $ref uses '#/definitions/...' against the bundled output.",
+  "definitions": {
+    "menu_tool": {
+      "description": "/tool -- operational tools (mac-server, bandwidth-server, email, graphing, netwatch, romon, sniffer, ...).",
+      "type": "object",
+      "properties": {
+        "description": {
+          "$ref": "#/definitions/description"
+        },
+        "mac-server": {
+          "$ref": "#/definitions/menu_tool_mac_server"
+        },
+        "bandwidth-server": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "email": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "graphing": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "netwatch": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "romon": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "sniffer": {
+          "$ref": "#/definitions/menu_generic"
+        }
+      },
+      "additionalProperties": false
+    },
+    "menu_tool_mac_server": {
+      "description": "/tool/mac-server -- MAC telnet ACL singleton, with `mac-winbox` (MAC Winbox ACL) and `ping` (MAC ping) sub-singletons.",
+      "if": {
+        "type": "array"
+      },
+      "then": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/item_tool_mac_server"
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_tool_mac_server"
+            }
+          },
+          "description": {
+            "$ref": "#/definitions/description"
+          },
+          "mac-winbox": {
+            "description": "/tool/mac-server/mac-winbox -- MAC Winbox ACL (singleton).",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_tool_mac_server_mac_winbox"
+            }
+          },
+          "ping": {
+            "description": "/tool/mac-server/ping -- MAC ping enable/disable (singleton).",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_tool_mac_server_ping"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "item_tool_mac_server": {
+      "type": "object",
+      "description": "/tool/mac-server -- MAC telnet ACL (singleton).",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "set"
+          ],
+          "default": "set",
+          "description": "Singleton: always `set`. Example: `set`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unused for singletons. Example: omit."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.tool.mac-server`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"mgmt only\"`."
+        },
+        "allowed-interface-list": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Interface-list (by `iac.*` token) permitted to use MAC telnet; use `iac.none` to disable. Example: `iac.list.mgmt`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_tool_mac_server_mac_winbox": {
+      "type": "object",
+      "description": "/tool/mac-server/mac-winbox -- MAC Winbox ACL (singleton).",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "set"
+          ],
+          "default": "set",
+          "description": "Singleton: always `set`. Example: `set`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unused for singletons. Example: omit."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.tool.mac-winbox`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"mgmt only\"`."
+        },
+        "allowed-interface-list": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Interface-list (by `iac.*` token) permitted to discover the router via MAC Winbox. Example: `iac.list.mgmt`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_tool_mac_server_ping": {
+      "type": "object",
+      "description": "/tool/mac-server/ping -- MAC ping (singleton).",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "set"
+          ],
+          "default": "set",
+          "description": "Singleton: always `set`. Example: `set`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unused for singletons. Example: omit."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.tool.mac-ping`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"disable mac ping\"`."
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "If true, the router responds to MAC-layer pings. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

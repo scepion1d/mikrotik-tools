@@ -60,7 +60,8 @@ End-to-end pipeline:
 ```powershell
 # 1. bundle a profile -> single self-contained .rsc
 #    Globals at <profile-parent>/{secrets,vars}.yaml are auto-discovered.
-#    `--validate` checks the YAML against src/schema.json before render.
+#    `--validate` checks the YAML against the rsc-bundled JSON Schema
+#    in-memory before render (no disk lookup).
 .\bin\rsc.cmd bundle --profile ..\src\segmentedx3 --yaml --validate -o ..\out
 # -> ..\out\segmentedx3-YYMMDD-XXXXX.rsc
 

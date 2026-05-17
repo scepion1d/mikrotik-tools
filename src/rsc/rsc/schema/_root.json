@@ -1,0 +1,133 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/scepion1d/mikrotik-iac/src/schema.json",
+  "title": "rsc.yaml profile source",
+  "description": "Schema for src/<profile>/NN-*.yaml (module shape) and src/{secrets,vars}.yaml (globals shape). Renders to RouterOS .rsc via `rsc bundle --yaml` -> rsc.yaml.to_rsc. Per-entity validation is layered on top of a generic recursive shape: each first-class RouterOS menu has its own item schema with typed properties (catches enum violations and unknown property names). Unknown menus fall back to the generic `menu_generic` / `item_generic` shape (preserves forward compatibility -- adding a new menu in YAML never breaks before the schema knows about it). The taxonomy of first-class menus mirrors tools/src/rsc/rsc/parser/menus.py (MENUS_WITH_NAME / MENUS_ORDERED / MENUS_SINGLETON / MENU_ORDER).",
+  "type": "object",
+  "if": {
+    "type": "object",
+    "required": [
+      "globals"
+    ]
+  },
+  "then": {
+    "$ref": "#/definitions/globals"
+  },
+  "else": {
+    "$ref": "#/definitions/module"
+  },
+  "definitions": {
+    "globals": {
+      "description": "A `:global` declaration file (secrets.yaml, vars.yaml).",
+      "type": "object",
+      "required": [
+        "globals"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "$ref": "#/definitions/description"
+        },
+        "globals": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "value"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "description": "The :global name (no `$` prefix)."
+              },
+              "value": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "description": "Literal value rendered as `:global NAME \"VALUE\"`."
+              },
+              "description": {
+                "$ref": "#/definitions/description"
+              }
+            }
+          }
+        }
+      }
+    },
+    "module": {
+      "description": "A profile module (e.g. 10-interfaces.yaml). Top-level keys are RouterOS top-level menus; known menus get typed validation, unknown menus fall back to `menu_generic`.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "$ref": "#/definitions/description"
+        },
+        "interface": {
+          "$ref": "#/definitions/menu_interface"
+        },
+        "ip": {
+          "$ref": "#/definitions/menu_ip"
+        },
+        "ipv6": {
+          "$ref": "#/definitions/menu_ipv6"
+        },
+        "system": {
+          "$ref": "#/definitions/menu_system"
+        },
+        "disk": {
+          "$ref": "#/definitions/menu_disk"
+        },
+        "user": {
+          "$ref": "#/definitions/menu_user"
+        },
+        "tool": {
+          "$ref": "#/definitions/menu_tool"
+        },
+        "routing": {
+          "$ref": "#/definitions/menu_routing"
+        },
+        "queue": {
+          "$ref": "#/definitions/menu_queue"
+        },
+        "ppp": {
+          "$ref": "#/definitions/menu_ppp"
+        },
+        "snmp": {
+          "$ref": "#/definitions/menu_snmp"
+        },
+        "radius": {
+          "$ref": "#/definitions/menu_radius"
+        },
+        "certificate": {
+          "$ref": "#/definitions/menu_certificate"
+        },
+        "file": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "port": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "log": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "special-login": {
+          "$ref": "#/definitions/menu_generic"
+        }
+      },
+      "patternProperties": {
+        "^(?!description$|globals$|interface$|ip$|ipv6$|system$|disk$|user$|tool$|routing$|queue$|ppp$|snmp$|radius$|certificate$|file$|port$|log$|special-login$)[A-Za-z0-9_-]+$": {
+          "$ref": "#/definitions/menu_generic"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -27,6 +27,16 @@ the parser falls back to comment-based identity, then position. List a
 menu in :data:`MENUS_WITH_NAME` only after verifying that ``name=`` is
 operator-settable on that menu (some menus have an auto-generated
 ``name`` you cannot change without recreating the row).
+
+Scope today
+-----------
+The four collections below catalogue the RouterOS menus this tooling
+treats as first-class: identity, ordering, and reference-checking are
+specialised for them. The catalogue is broad (routing, IPsec, PPP,
+QoS, system ops, users, SNMP, tunnels, IPv6 plane) so most authored
+profiles "just work". A menu not listed at all still parses correctly
+-- it just uses generic identity (name= / comment / position) and is
+emitted in alphabetic order after every canonical menu.
 """
 
 from __future__ import annotations
@@ -36,20 +46,78 @@ from __future__ import annotations
 # Items here use ``name=`` as their identity key when present.
 MENUS_WITH_NAME: frozenset[str] = frozenset(
     {
+        # --- interface bag + bridge plumbing ----------------------------
         "/interface/list",
         "/interface/bridge",
+        # --- tunnels & alternative L2/L3 overlays (name= required when
+        # adding; the row is addressed by name everywhere it's referenced).
+        "/interface/wireguard",
+        "/interface/gre",
+        "/interface/gre6",
+        "/interface/eoip",
+        "/interface/eoip6",
+        "/interface/ipip",
+        "/interface/ipip6",
+        "/interface/vxlan",
+        "/interface/bonding",
+        "/interface/vrrp",
+        "/interface/ovpn-client",
+        "/interface/l2tp-client",
+        "/interface/sstp-client",
+        "/interface/pptp-client",
+        "/interface/pppoe-client",
+        # --- Wi-Fi (wifi-qcom) ------------------------------------------
         "/interface/wifi/datapath",
         "/interface/wifi/security",
         "/interface/wifi/channel",
         "/interface/wifi/configuration",
+        "/interface/wifi/aaa",
+        "/interface/wifi/steering",
+        # --- IPv4 service plumbing --------------------------------------
         "/ip/pool",
         "/ip/dhcp-server",
+        "/ip/dhcp-relay",
         # /ip/service rows have a stable user-visible `name` (the service
         # name itself: telnet, ssh, winbox, ...). Treating it as the
         # identity key keeps the differ stable when /export and authored
         # configs emit services in different orders.
         "/ip/service",
+        # --- IPv6 service plumbing --------------------------------------
+        "/ipv6/pool",
+        "/ipv6/dhcp-server",
+        "/ipv6/dhcp-server/option",
+        "/ipv6/dhcp-client",
+        # --- routing (named instances + tables) -------------------------
+        "/ip/route/vrf",
+        "/routing/table",
+        "/routing/id",
+        "/routing/ospf/instance",
+        "/routing/ospf/area",
+        "/routing/bgp/connection",
+        "/routing/bgp/template",
+        # --- IPsec (peer/profile/proposal/mode-config all keyed by name=)
+        "/ip/ipsec/peer",
+        "/ip/ipsec/profile",
+        "/ip/ipsec/proposal",
+        "/ip/ipsec/mode-config",
+        # --- PPP --------------------------------------------------------
+        "/ppp/profile",
+        "/ppp/secret",
+        # --- QoS --------------------------------------------------------
+        "/queue/simple",
+        "/queue/tree",
+        "/queue/type",
+        # --- system / users --------------------------------------------
         "/system/script",
+        "/system/scheduler",
+        "/system/logging/action",
+        "/user",
+        "/user/group",
+        # --- SNMP / RADIUS / certificates -------------------------------
+        "/snmp/community",
+        "/certificate",
+        # --- monitoring -------------------------------------------------
+        "/tool/netwatch",
     }
 )
 
@@ -59,14 +127,24 @@ MENUS_WITH_NAME: frozenset[str] = frozenset(
 # change in these menus to wipe-then-add.
 MENUS_ORDERED: frozenset[str] = frozenset(
     {
+        # firewall (v4)
         "/ip/firewall/filter",
         "/ip/firewall/nat",
         "/ip/firewall/mangle",
         "/ip/firewall/raw",
+        # firewall (v6)
         "/ipv6/firewall/filter",
         "/ipv6/firewall/nat",
         "/ipv6/firewall/mangle",
         "/ipv6/firewall/raw",
+        # routing-policy and OSPF/BGP filter chains are matched top-down
+        # like firewall rules; treat them ordered to avoid positional
+        # shift hazards.
+        "/ip/route/rule",
+        "/ipv6/route/rule",
+        "/routing/filter/rule",
+        # Wi-Fi access-list is evaluated top-down per association.
+        "/interface/wifi/access-list",
     }
 )
 
@@ -75,16 +153,53 @@ MENUS_ORDERED: frozenset[str] = frozenset(
 # sense). Identity is the menu path itself.
 MENUS_SINGLETON: frozenset[str] = frozenset(
     {
+        # --- IPv4 -------------------------------------------------------
         "/ip/dns",
+        "/ip/cloud",
+        "/ip/cloud/advanced",
+        "/ip/proxy",
+        "/ip/upnp",
+        "/ip/smb",
+        "/ip/socks",
+        "/ip/settings",
+        "/ip/traffic-flow",
+        "/ip/traffic-flow/ipfix",
         "/ip/neighbor/discovery-settings",
+        "/ip/firewall/connection-tracking",
+        # --- IPv6 -------------------------------------------------------
+        "/ipv6/settings",
+        "/ipv6/neighbor/discovery-settings",
+        # --- system identity / clock / boot ----------------------------
         "/system/clock",
         "/system/identity",
+        "/system/note",
+        "/system/watchdog",
+        "/system/health/settings",
+        "/system/leds/settings",
+        "/system/ntp/client",
+        "/system/ntp/server",
+        "/system/logging",
+        "/system/package/update",
         "/disk/settings",
+        # --- routerboard buttons / Wi-Fi CAPsMAN settings --------------
+        "/system/routerboard/mode-button",
+        "/system/routerboard/wps-button",
+        "/interface/wifi/cap",
+        "/interface/wifi/capsman",
+        # --- SNMP / RADIUS singletons ----------------------------------
+        "/snmp",
+        "/radius/incoming",
+        # --- user auth defaults ----------------------------------------
+        "/user/aaa",
+        # --- tools (router-wide settings blocks) -----------------------
         "/tool/mac-server",
         "/tool/mac-server/mac-winbox",
         "/tool/mac-server/ping",
-        "/system/routerboard/mode-button",
-        "/system/routerboard/wps-button",
+        "/tool/email",
+        "/tool/graphing",
+        "/tool/romon",
+        "/tool/sniffer",
+        "/tool/bandwidth-server",
     }
 )
 
@@ -108,44 +223,153 @@ MENUS_SINGLETON: frozenset[str] = frozenset(
 # with this tuple. Keeping diff and bundle aligned makes round-trip
 # verification (apply diff -> /export -> compare to bundle) stable.
 MENU_ORDER: tuple[str, ...] = (
+    # ---- Certificates (referenced by IPsec identity=, services) -------
+    "/certificate",
     # ---- L1/L2: physical interfaces and bridge plumbing ---------------
     "/interface/list",                # named bag, used by /interface/list/member
     "/interface/ethernet",            # rename ether1..N
+    "/interface/bonding",             # aggregates ethernet members
     "/interface/bridge",              # creates iac.bridge.lan
     "/interface/bridge/port",         # ether -> bridge
     "/interface/bridge/vlan",         # VLAN table on the bridge
     "/interface/vlan",                # L3 termination on the bridge
+    "/interface/vrrp",                # rides on top of vlan/ether
+    # ---- Tunnels (named L2/L3 overlays; referenced as interface=) -----
+    "/interface/wireguard",           # the interface itself
+    "/interface/wireguard/peers",     # ties to /interface/wireguard
+    "/interface/gre",
+    "/interface/gre6",
+    "/interface/eoip",
+    "/interface/eoip6",
+    "/interface/ipip",
+    "/interface/ipip6",
+    "/interface/vxlan",
+    "/interface/ovpn-client",
+    "/interface/l2tp-client",
+    "/interface/sstp-client",
+    "/interface/pptp-client",
+    "/interface/pppoe-client",
     # ---- Wi-Fi hierarchy ----------------------------------------------
+    "/interface/wifi/aaa",            # referenced by configuration aaa=
+    "/interface/wifi/steering",       # referenced by configuration steering=
     "/interface/wifi/datapath",       # referenced by configuration
     "/interface/wifi/security",       # referenced by configuration
     "/interface/wifi/channel",        # referenced by configuration
     "/interface/wifi/configuration",  # referenced by /interface/wifi
     "/interface/wifi",                # binds configuration to the radios
+    "/interface/wifi/access-list",    # references /interface/wifi by name
+    "/interface/wifi/cap",            # singleton, depends on configuration
+    "/interface/wifi/capsman",        # singleton manager-side config
+    "/interface/wifi/provisioning",   # references configuration= by name
     # ---- Interface list membership (depends on all interfaces above) --
     "/interface/list/member",
     # ---- L3: IP plane -------------------------------------------------
     "/ip/address",                    # depends on /interface/vlan + bridge
+    "/ip/arp",                        # static ARP; depends on /interface
     "/ip/dhcp-client",                # depends on /interface/ethernet
+    "/ip/dhcp-relay",                 # depends on /interface
     "/ip/pool",                       # referenced by /ip/dhcp-server
     "/ip/dhcp-server",                # depends on /ip/pool + /interface/vlan
     "/ip/dhcp-server/network",        # depends on /ip/dhcp-server
     "/ip/dhcp-server/lease",          # depends on /ip/dhcp-server (server=)
     "/ip/dns",
     "/ip/dns/static",
+    # ---- Routing ------------------------------------------------------
+    "/routing/table",                 # referenced by /ip/route routing-table=
+    "/routing/id",
+    "/routing/bfd/configuration",     # referenced by routing protocols
+    "/ip/route/vrf",                  # depends on /interface
+    "/ip/route",                      # depends on /interface, /routing/table
+    "/ip/route/rule",                 # depends on /ip/route, /routing/table
+    "/ipv6/route",
+    "/ipv6/route/rule",
+    "/routing/ospf/instance",         # referenced by /routing/ospf/area
+    "/routing/ospf/area",             # referenced by interface-template
+    "/routing/ospf/interface-template",
+    "/routing/bgp/template",          # referenced by /routing/bgp/connection
+    "/routing/bgp/connection",
+    "/routing/filter/rule",
+    # ---- Firewall (depends on address-list, interface-list, layer7) ---
     "/ip/firewall/address-list",      # referenced by /ip/firewall/{filter,nat,...}
+    "/ip/firewall/layer7-protocol",   # referenced by filter layer7-protocol=
+    "/ip/firewall/service-port",      # ALG helpers; referenced by NAT
+    "/ip/firewall/connection-tracking",  # singleton; safe early
+    "/ip/firewall/raw",
+    "/ip/firewall/mangle",
     "/ip/firewall/nat",
     "/ip/firewall/filter",
     # ---- IPv6 ---------------------------------------------------------
-    "/ipv6/firewall/address-list",    # referenced by /ipv6/firewall/filter
+    "/ipv6/settings",                 # singleton, no deps
+    "/ipv6/address",                  # depends on /interface
+    "/ipv6/pool",                     # referenced by /ipv6/dhcp-server
+    "/ipv6/dhcp-server",              # depends on /ipv6/pool + /interface
+    "/ipv6/dhcp-server/option",
+    "/ipv6/dhcp-server/binding",      # depends on /ipv6/dhcp-server
+    "/ipv6/firewall/address-list",    # referenced by /ipv6/firewall/*
+    "/ipv6/firewall/raw",
+    "/ipv6/firewall/mangle",
+    "/ipv6/firewall/nat",
     "/ipv6/firewall/filter",
     "/ipv6/nd",
+    "/ipv6/neighbor/discovery-settings",
+    # ---- IPsec (depends on /certificate) ------------------------------
+    "/ip/ipsec/profile",              # referenced by /ip/ipsec/peer profile=
+    "/ip/ipsec/proposal",             # referenced by /ip/ipsec/policy proposal=
+    "/ip/ipsec/mode-config",          # referenced by /ip/ipsec/peer mode-config=
+    "/ip/ipsec/peer",                 # depends on profile + mode-config
+    "/ip/ipsec/identity",             # depends on /ip/ipsec/peer + /certificate
+    "/ip/ipsec/policy",               # depends on /ip/ipsec/peer + proposal
+    # ---- PPP ----------------------------------------------------------
+    "/ppp/profile",                   # referenced by /ppp/secret profile=
+    "/ppp/secret",
+    # ---- QoS ----------------------------------------------------------
+    "/queue/type",                    # referenced by simple/tree queue=
+    "/queue/interface",               # depends on /interface
+    "/queue/tree",                    # parent= may reference other queue/tree
+    "/queue/simple",
+    # ---- Users / SNMP / RADIUS ----------------------------------------
+    "/user/group",                    # referenced by /user group=
+    "/user",
+    "/user/ssh-keys",                 # references /user by name (user=)
+    "/user/aaa",                      # singleton, references default-group=
+    "/radius",                        # referenced by /user/aaa use-radius=
+    "/radius/incoming",               # singleton
+    "/snmp/community",                # referenced by /snmp trap-community=
+    "/snmp",                          # singleton
+    # ---- System ops ---------------------------------------------------
+    "/system/logging/action",         # referenced by /system/logging action=
+    "/system/logging",
+    "/system/note",                   # singleton
+    "/system/ntp/client",             # singleton
+    "/system/ntp/server",             # singleton
+    "/system/watchdog",               # singleton
+    "/system/scheduler",              # references /system/script by name
+    "/system/leds",                   # depends on /interface
+    "/system/leds/settings",          # singleton
+    "/system/health/settings",        # singleton
+    "/system/package/update",         # singleton
     # ---- Reference-heavy "settings" / late tools ----------------------
     # These reference items created by earlier menus.
     "/disk/settings",                 # auto-media-interface= -> /interface/vlan
+    "/ip/cloud",                      # singleton
+    "/ip/cloud/advanced",             # singleton
+    "/ip/settings",                   # singleton
+    "/ip/proxy",                      # singleton
+    "/ip/upnp",                       # singleton
+    "/ip/smb",                        # singleton
+    "/ip/socks",                      # singleton
+    "/ip/traffic-flow",               # singleton
+    "/ip/traffic-flow/ipfix",         # singleton
     "/ip/neighbor/discovery-settings",
     "/tool/mac-server",
     "/tool/mac-server/mac-winbox",
     "/tool/mac-server/ping",
+    "/tool/email",                    # singleton
+    "/tool/graphing",                 # singleton
+    "/tool/sniffer",                  # singleton
+    "/tool/romon",                    # singleton
+    "/tool/bandwidth-server",         # singleton
+    "/tool/netwatch",                 # depends on routing + interfaces
     "/system/routerboard/mode-button",
     "/system/routerboard/wps-button",
     "/ip/service",                    # address= acl, depends on nothing critical

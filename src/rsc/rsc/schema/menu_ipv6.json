@@ -1,0 +1,481 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Schema fragment (menu_ipv6.json). Merged into src/schema.json by src/schema/build.py. Do not load directly -- cross-fragment $ref uses '#/definitions/...' against the bundled output.",
+  "definitions": {
+    "menu_ipv6": {
+      "description": "/ipv6 -- top-level IPv6 menu. Houses addresses, DHCPv6, firewall, ND/RA, neighbours, pools, routes, and settings.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "$ref": "#/definitions/description"
+        },
+        "address": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "dhcp-client": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "dhcp-server": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "firewall": {
+          "$ref": "#/definitions/menu_ipv6_firewall"
+        },
+        "nd": {
+          "description": "/ipv6/nd -- IPv6 neighbour discovery / router-advertisement policy per interface.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/item_ipv6_nd"
+          }
+        },
+        "neighbor": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "pool": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "route": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "settings": {
+          "$ref": "#/definitions/menu_generic"
+        }
+      },
+      "additionalProperties": false
+    },
+    "menu_ipv6_firewall": {
+      "description": "/ipv6/firewall -- IPv6 firewall. Hosts `address-list`, `filter`, `nat`, `mangle`, and `raw` sub-menus.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "$ref": "#/definitions/description"
+        },
+        "address-list": {
+          "description": "/ipv6/firewall/address-list -- named IPv6 address-list entries.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/item_ipv6_firewall_address_list"
+          }
+        },
+        "filter": {
+          "description": "/ipv6/firewall/filter -- input/forward/output filter rules (IPv6).",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/item_ipv6_firewall_filter"
+          }
+        },
+        "nat": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "mangle": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "raw": {
+          "$ref": "#/definitions/menu_generic"
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_ipv6_firewall_address_list": {
+      "type": "object",
+      "description": "/ipv6/firewall/address-list -- one entry in a named IPv6 address-list.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` appends a new entry; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find list=v6blocklist]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.ipv6.addr.lan`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"office ULA\"`."
+        },
+        "list": {
+          "type": "string",
+          "description": "Address-list name the entry belongs to. Example: `lan_clients_v6`."
+        },
+        "address": {
+          "$ref": "#/definitions/ipv6Cidr",
+          "description": "IPv6 address or CIDR. Example: `2001:db8::/64`."
+        },
+        "timeout": {
+          "$ref": "#/definitions/duration",
+          "description": "Optional auto-expiry. Example: `1h`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the entry is created with `disabled=yes`. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_ipv6_firewall_filter": {
+      "type": "object",
+      "description": "/ipv6/firewall/filter -- IPv6 filter rule.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` appends a rule; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find chain=input comment~\"icmp6\"]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.fw6.input.icmp`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"allow ICMPv6\"`."
+        },
+        "chain": {
+          "type": "string",
+          "description": "Filter chain (`input`, `forward`, `output`, or custom). Example: `input`."
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "accept",
+            "add-dst-to-address-list",
+            "add-src-to-address-list",
+            "drop",
+            "fasttrack-connection",
+            "jump",
+            "log",
+            "passthrough",
+            "reject",
+            "return",
+            "tarpit"
+          ],
+          "description": "Filter action. Example: `accept`."
+        },
+        "src-address": {
+          "type": "string",
+          "description": "Source address(es) to match. Example: `fe80::/10`."
+        },
+        "dst-address": {
+          "type": "string",
+          "description": "Destination address(es) to match. Example: `::/0`."
+        },
+        "src-address-list": {
+          "type": "string",
+          "description": "Match if source IP is on this list. Example: `iac.ipv6.addr.lan`."
+        },
+        "dst-address-list": {
+          "type": "string",
+          "description": "Match if destination IP is on this list. Example: `iac.ipv6.addr.blocked`."
+        },
+        "src-port": {
+          "$ref": "#/definitions/port",
+          "description": "Source L4 port(s). Example: `1024-65535`."
+        },
+        "dst-port": {
+          "$ref": "#/definitions/port",
+          "description": "Destination L4 port(s). Example: `443`."
+        },
+        "port": {
+          "$ref": "#/definitions/port",
+          "description": "Match either src- or dst-port. Example: `53`."
+        },
+        "protocol": {
+          "type": [
+            "string",
+            "integer"
+          ],
+          "description": "IP protocol name or number. Example: `icmpv6`."
+        },
+        "in-interface": {
+          "type": "string",
+          "description": "Ingress interface name. Example: `bridge-lan`."
+        },
+        "out-interface": {
+          "type": "string",
+          "description": "Egress interface name. Example: `wan`."
+        },
+        "in-interface-list": {
+          "type": "string",
+          "description": "Match ingress on any iface in this list. Example: `iac.list.lan`."
+        },
+        "out-interface-list": {
+          "type": "string",
+          "description": "Match egress on any iface in this list. Example: `iac.list.wan`."
+        },
+        "connection-state": {
+          "type": "string",
+          "description": "Conntrack state set. Example: `established,related`."
+        },
+        "connection-mark": {
+          "type": "string",
+          "description": "Match a connection mark. Example: `vpn`."
+        },
+        "connection-type": {
+          "type": "string",
+          "description": "Match helper-classified connection type. Example: `sip`."
+        },
+        "connection-limit": {
+          "type": "string",
+          "description": "Connection-count match. Example: `100,64`."
+        },
+        "connection-rate": {
+          "type": "string",
+          "description": "Connection bps rate match. Example: `1M-100M`."
+        },
+        "headers": {
+          "type": "string",
+          "description": "Match IPv6 extension headers. Example: `hop,!frag`."
+        },
+        "hop-limit": {
+          "type": "string",
+          "description": "IPv6 hop-limit comparator. Example: `equal:1`."
+        },
+        "icmp-options": {
+          "type": "string",
+          "description": "ICMPv6 type:code. Example: `135:0`."
+        },
+        "ingress-priority": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Match VLAN/MPLS ingress priority. Example: `0`."
+        },
+        "ipsec-policy": {
+          "type": "string",
+          "description": "Match IPsec policy state. Example: `in,ipsec`."
+        },
+        "jump-target": {
+          "type": "string",
+          "description": "Target chain for `action=jump`. Example: `icmp6`."
+        },
+        "limit": {
+          "type": "string",
+          "description": "`count,burst:mode` rate limit. Example: `10,5:packet`."
+        },
+        "log": {
+          "type": "boolean",
+          "description": "Also log matched packets. Example: `false`."
+        },
+        "log-prefix": {
+          "type": "string",
+          "description": "String prefixed to log lines. Example: `fw6-drop`."
+        },
+        "nth": {
+          "type": "string",
+          "description": "Match every n-th packet (`every,packet`). Example: `2,1`."
+        },
+        "p2p": {
+          "type": "string",
+          "description": "Match a P2P protocol. Example: omit."
+        },
+        "packet-mark": {
+          "type": "string",
+          "description": "Match a packet-mark. Example: `voip`."
+        },
+        "packet-size": {
+          "type": "string",
+          "description": "Packet size range in bytes. Example: `64-1500`."
+        },
+        "per-connection-classifier": {
+          "type": "string",
+          "description": "PCC selector. Example: `src-address-and-port:2/0`."
+        },
+        "priority": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Match queue priority. Example: `4`."
+        },
+        "random": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Match a random N percent of packets. Example: `50`."
+        },
+        "reject-with": {
+          "type": "string",
+          "description": "ICMPv6/TCP reject reason. Example: `icmp-no-route`."
+        },
+        "routing-mark": {
+          "type": "string",
+          "description": "Match a routing-mark. Example: `wan2`."
+        },
+        "routing-table": {
+          "type": "string",
+          "description": "Match a routing-table. Example: `main`."
+        },
+        "src-mac-address": {
+          "$ref": "#/definitions/macAddressish",
+          "description": "Match a source MAC address. Example: `AA:BB:CC:DD:EE:FF`."
+        },
+        "tcp-flags": {
+          "type": "string",
+          "description": "TCP flag mask. Example: `syn,!ack`."
+        },
+        "tcp-mss": {
+          "type": "string",
+          "description": "TCP MSS match. Example: `1300-1460`."
+        },
+        "time": {
+          "type": "string",
+          "description": "Time-of-day/day-of-week filter. Example: `08:00-18:00,mon,tue,wed,thu,fri`."
+        },
+        "tls-host": {
+          "type": "string",
+          "description": "Match SNI hostname (regex). Example: `.*example\\.com$`."
+        },
+        "address-list": {
+          "type": "string",
+          "description": "Target list for `add-*-to-address-list` actions. Example: `iac.ipv6.addr.bruteforce`."
+        },
+        "address-list-timeout": {
+          "$ref": "#/definitions/duration",
+          "description": "Expiry for entries added by the action. Example: `1d`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the rule is created with `disabled=yes`. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_ipv6_nd": {
+      "type": "object",
+      "description": "/ipv6/nd -- IPv6 neighbour discovery / RA policy.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "set",
+          "description": "`set` updates the row matched by `filter`; `add` registers a new ND profile. Example: `set`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find interface=lan]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.ipv6.nd.lan`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"send DNS in RA\"`."
+        },
+        "interface": {
+          "type": "string",
+          "description": "Interface name to apply ND/RA on. Example: `bridge-lan`."
+        },
+        "advertise-dns": {
+          "type": "boolean",
+          "description": "Include RDNSS option in RA. Example: `true`."
+        },
+        "advertise-mac-address": {
+          "type": "boolean",
+          "description": "Include source link-layer option in RA. Example: `true`."
+        },
+        "dns": {
+          "type": "string",
+          "description": "Explicit DNS server list for RDNSS. Example: `fd00::1`."
+        },
+        "hop-limit": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "RA cur-hop-limit value. Example: `64`."
+        },
+        "managed-address-configuration": {
+          "type": "boolean",
+          "description": "Set the `M` flag (DHCPv6 for addresses). Example: `false`."
+        },
+        "mtu": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "RA MTU option (`unspecified` to omit). Example: `unspecified`."
+        },
+        "other-configuration": {
+          "type": "boolean",
+          "description": "Set the `O` flag (stateless DHCPv6 for options). Example: `false`."
+        },
+        "ra-delay": {
+          "$ref": "#/definitions/duration",
+          "description": "Delay before sending RA after interface comes up. Example: `3s`."
+        },
+        "ra-interval": {
+          "type": "string",
+          "description": "`min-max` interval between unsolicited RAs. Example: `200-600`."
+        },
+        "ra-lifetime": {
+          "$ref": "#/definitions/duration",
+          "description": "Default router lifetime announced in RA (`0` = not a router). Example: `30m`."
+        },
+        "ra-preference": {
+          "type": "string",
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ],
+          "description": "Router preference advertised in RA. Example: `medium`."
+        },
+        "reachable-time": {
+          "$ref": "#/definitions/duration",
+          "description": "Reachable-time announced in RA. Example: `0s`."
+        },
+        "retransmit-interval": {
+          "$ref": "#/definitions/duration",
+          "description": "Retransmit-interval announced in RA. Example: `0s`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, ND/RA on this interface is disabled. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

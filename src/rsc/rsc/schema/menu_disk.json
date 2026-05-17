@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Schema fragment (menu_disk.json). Merged into src/schema.json by src/schema/build.py. Do not load directly -- cross-fragment $ref uses '#/definitions/...' against the bundled output.",
+  "definitions": {
+    "menu_disk": {
+      "description": "/disk -- storage media menu. Holds the `settings` singleton sub-menu (USB/SMB auto-share defaults).",
+      "type": "object",
+      "properties": {
+        "description": {
+          "$ref": "#/definitions/description"
+        },
+        "settings": {
+          "description": "/disk/settings -- singleton row controlling automatic media mounting/sharing.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/item_disk_settings"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_disk_settings": {
+      "type": "object",
+      "description": "/disk/settings -- USB/media defaults (singleton).",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "set"
+          ],
+          "default": "set",
+          "description": "Singleton: always `set`. Example: `set`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unused for singletons. Example: omit."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.disk.settings`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"no USB sharing\"`."
+        },
+        "auto-media-interface": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Interface (by `iac.*` token) that auto-mounted media should bind to. Example: `iac.bridge.lan`."
+        },
+        "auto-media-sharing": {
+          "type": "boolean",
+          "description": "Automatically share newly inserted media. Example: `false`."
+        },
+        "auto-smb-sharing": {
+          "type": "boolean",
+          "description": "Automatically expose media over SMB. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

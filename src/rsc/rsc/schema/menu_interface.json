@@ -1,0 +1,1478 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Schema fragment (menu_interface.json). Merged into src/schema.json by src/schema/build.py. Do not load directly -- cross-fragment $ref uses '#/definitions/...' against the bundled output.",
+  "definitions": {
+    "menu_interface": {
+      "description": "/interface -- top-level interface menu. Houses physical Ethernet ports, bridges, VLAN sub-interfaces, Wi-Fi radios, tunnels, and the `list` taxonomy. Known sub-menus get typed validation; unknown ones fall back to `menu_generic`.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "$ref": "#/definitions/description"
+        },
+        "list": {
+          "$ref": "#/definitions/menu_interface_list"
+        },
+        "ethernet": {
+          "$ref": "#/definitions/menu_array_item_interface_ethernet"
+        },
+        "bridge": {
+          "$ref": "#/definitions/menu_interface_bridge"
+        },
+        "vlan": {
+          "$ref": "#/definitions/menu_array_item_interface_vlan"
+        },
+        "wifi": {
+          "$ref": "#/definitions/menu_interface_wifi"
+        },
+        "bonding": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "vrrp": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "wireguard": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "gre": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "gre6": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "eoip": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "eoip6": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "ipip": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "ipip6": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "vxlan": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "ovpn-client": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "l2tp-client": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "sstp-client": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "pptp-client": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "pppoe-client": {
+          "$ref": "#/definitions/menu_generic"
+        }
+      },
+      "additionalProperties": false
+    },
+    "menu_interface_list": {
+      "description": "/interface/list -- named interface lists (e.g. `mgmt`, `wan`, `lan`) used by firewall rules, ND, MAC-server, etc. Accepts either a plain list of list rows, or an object with `_items` + a `member` sub-list for membership rows.",
+      "if": {
+        "type": "array"
+      },
+      "then": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/item_interface_list"
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_interface_list"
+            }
+          },
+          "description": {
+            "$ref": "#/definitions/description"
+          },
+          "member": {
+            "description": "/interface/list/member -- membership rows mapping interfaces into a list.",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_interface_list_member"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "menu_interface_bridge": {
+      "description": "/interface/bridge -- bridge devices. Either a plain list of bridge rows, or an object with `_items` plus `port` and `vlan` sub-lists for port attachments and bridge-VLAN entries.",
+      "if": {
+        "type": "array"
+      },
+      "then": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/item_interface_bridge"
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_interface_bridge"
+            }
+          },
+          "description": {
+            "$ref": "#/definitions/description"
+          },
+          "port": {
+            "description": "/interface/bridge/port -- attaches an interface to a bridge.",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_interface_bridge_port"
+            }
+          },
+          "vlan": {
+            "description": "/interface/bridge/vlan -- VLAN entries on a (VLAN-aware) bridge.",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_interface_bridge_vlan"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "menu_interface_wifi": {
+      "description": "/interface/wifi -- Wi-Fi radios and virtual APs (wifi-qcom driver). Either a plain list of wifi-interface rows, or an object with `_items` plus profile sub-menus (`datapath`, `security`, `channel`, `configuration`, `aaa`, `steering`, ...).",
+      "if": {
+        "type": "array"
+      },
+      "then": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/item_interface_wifi"
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_interface_wifi"
+            }
+          },
+          "description": {
+            "$ref": "#/definitions/description"
+          },
+          "datapath": {
+            "description": "/interface/wifi/datapath -- L2 datapath profiles (bridge + VLAN + isolation).",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_interface_wifi_datapath"
+            }
+          },
+          "security": {
+            "description": "/interface/wifi/security -- WPA/WPA2/WPA3 + passphrase profiles.",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_interface_wifi_security"
+            }
+          },
+          "channel": {
+            "description": "/interface/wifi/channel -- band + width + DFS policy profiles.",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_interface_wifi_channel"
+            }
+          },
+          "configuration": {
+            "description": "/interface/wifi/configuration -- binds datapath + security + channel into a named profile referenced by `/interface/wifi`.",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_interface_wifi_configuration"
+            }
+          },
+          "access-list": {
+            "$ref": "#/definitions/menu_generic"
+          },
+          "cap": {
+            "$ref": "#/definitions/menu_generic"
+          },
+          "capsman": {
+            "$ref": "#/definitions/menu_generic"
+          },
+          "aaa": {
+            "$ref": "#/definitions/menu_generic"
+          },
+          "steering": {
+            "$ref": "#/definitions/menu_generic"
+          },
+          "provisioning": {
+            "$ref": "#/definitions/menu_generic"
+          },
+          "radio": {
+            "$ref": "#/definitions/menu_generic"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "menu_array_item_interface_vlan": {
+      "description": "/interface/vlan -- 802.1Q VLAN sub-interfaces (L3 termination). Either a plain list of VLAN rows, or an object with `_items` for the rows + a sibling `description`.",
+      "if": {
+        "type": "array"
+      },
+      "then": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/item_interface_vlan"
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_interface_vlan"
+            }
+          },
+          "description": {
+            "$ref": "#/definitions/description"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "menu_array_item_interface_ethernet": {
+      "description": "/interface/ethernet -- physical Ethernet ports. Almost always tuned via `set [find default-name=etherN]`. Either a plain list of rows, or an object with `_items` + a sibling `description`.",
+      "if": {
+        "type": "array"
+      },
+      "then": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/item_interface_ethernet"
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_interface_ethernet"
+            }
+          },
+          "description": {
+            "$ref": "#/definitions/description"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "item_interface_list": {
+      "type": "object",
+      "description": "/interface/list -- a named interface list (membership rows live under .member).",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` creates a new list; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find name=mgmt]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.list.mgmt`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"management ifaces\"`."
+        },
+        "name": {
+          "$ref": "#/definitions/iacToken",
+          "description": "List name (token-style; referenced from filters and member rows). Example: `iac.list.mgmt`."
+        },
+        "include": {
+          "type": "string",
+          "description": "Comma list of nested lists to union into this list. Example: `iac.list.lan,iac.list.iot`."
+        },
+        "exclude": {
+          "type": "string",
+          "description": "Comma list of nested lists to exclude from this list. Example: `iac.list.guest`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_interface_list_member": {
+      "type": "object",
+      "description": "/interface/list/member -- an interface placed into a list.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` enrolls a new member; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find list=mgmt interface=ether1]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.list.mgmt.ether1`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"uplink to office\"`."
+        },
+        "list": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Target list (by `iac.*` token). Example: `iac.list.mgmt`."
+        },
+        "interface": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Interface to enrol (by `iac.*` token). Example: `iac.ether.ether1`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the membership is inactive. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_interface_ethernet": {
+      "type": "object",
+      "description": "/interface/ethernet -- physical port (almost always `set [find default-name=etherN]`).",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "set",
+          "description": "Physical ports are pre-created -- prefer `set`. Example: `set`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find default-name=ether1]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.ether.wan`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"ISP uplink\"`."
+        },
+        "name": {
+          "$ref": "#/definitions/iacToken",
+          "description": "New logical name of the port. Example: `iac.ether.wan`."
+        },
+        "default-name": {
+          "type": "string",
+          "description": "Factory port label used for `set [find default-name=...]`. Example: `ether1`."
+        },
+        "mtu": {
+          "type": "integer",
+          "minimum": 68,
+          "maximum": 65535,
+          "description": "L3 MTU in bytes. Example: `1500`."
+        },
+        "l2mtu": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "description": "L2 MTU in bytes (for jumbo/Q-in-Q). Example: `1592`."
+        },
+        "arp": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "enabled",
+            "local-proxy-arp",
+            "proxy-arp",
+            "reply-only"
+          ],
+          "description": "ARP behaviour on the port. Example: `enabled`."
+        },
+        "auto-negotiation": {
+          "type": "boolean",
+          "description": "Enable Ethernet auto-negotiation. Example: `true`."
+        },
+        "speed": {
+          "type": "string",
+          "description": "Forced port speed when auto-negotiation is off. Example: `1Gbps`."
+        },
+        "full-duplex": {
+          "type": "boolean",
+          "description": "Forced duplex when auto-negotiation is off. Example: `true`."
+        },
+        "rx-flow-control": {
+          "type": "string",
+          "enum": [
+            "on",
+            "off",
+            "auto"
+          ],
+          "description": "802.3x rx pause behaviour. Example: `auto`."
+        },
+        "tx-flow-control": {
+          "type": "string",
+          "enum": [
+            "on",
+            "off",
+            "auto"
+          ],
+          "description": "802.3x tx pause behaviour. Example: `auto`."
+        },
+        "advertise": {
+          "type": "string",
+          "description": "Comma list of speeds/duplex advertised in auto-neg. Example: `1000M-full,100M-full`."
+        },
+        "mac-address": {
+          "$ref": "#/definitions/macAddressish",
+          "description": "Override the port's MAC address. Example: `02:11:22:33:44:55`."
+        },
+        "poe-out": {
+          "type": "string",
+          "description": "PoE-out mode on supported ports. Example: `off`."
+        },
+        "poe-priority": {
+          "type": "integer",
+          "description": "PoE-out budget priority (1=highest). Example: `10`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the port is administratively down. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_interface_bridge": {
+      "type": "object",
+      "description": "/interface/bridge -- a bridge device.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` creates a new bridge; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find name=bridge-lan]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.bridge.lan`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"LAN bridge\"`."
+        },
+        "name": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Bridge interface name. Example: `iac.bridge.lan`."
+        },
+        "protocol-mode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "rstp",
+            "stp",
+            "mstp"
+          ],
+          "description": "Spanning-tree protocol mode. Example: `rstp`."
+        },
+        "vlan-filtering": {
+          "type": "boolean",
+          "description": "Enable 802.1Q VLAN-aware bridging. Example: `true`."
+        },
+        "pvid": {
+          "$ref": "#/definitions/vlanId",
+          "description": "Default port VLAN id for untagged ingress on the bridge itself. Example: `1`."
+        },
+        "ether-type": {
+          "type": "string",
+          "enum": [
+            "0x8100",
+            "0x88a8",
+            "0x9100"
+          ],
+          "description": "Tag ether-type for VLAN frames. Example: `0x8100`."
+        },
+        "frame-types": {
+          "type": "string",
+          "description": "Default accepted frame types on the bridge. Example: `admit-all`."
+        },
+        "ingress-filtering": {
+          "type": "boolean",
+          "description": "Drop tagged frames whose VLAN is not on the port. Example: `true`."
+        },
+        "mtu": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "L3 MTU; `auto` matches smallest port. Example: `auto`."
+        },
+        "admin-mac": {
+          "$ref": "#/definitions/macAddressish",
+          "description": "Static MAC for the bridge interface. Example: `02:CA:FE:00:00:01`."
+        },
+        "auto-mac": {
+          "type": "boolean",
+          "description": "Auto-pick the bridge MAC from a member port. Example: `false`."
+        },
+        "fast-forward": {
+          "type": "boolean",
+          "description": "Enable bridge fast-forwarding for 2-port bridges. Example: `false`."
+        },
+        "igmp-snooping": {
+          "type": "boolean",
+          "description": "Enable IGMP/MLD snooping on the bridge. Example: `false`."
+        },
+        "dhcp-snooping": {
+          "type": "boolean",
+          "description": "Enable DHCP snooping (requires bridge filters). Example: `false`."
+        },
+        "max-message-age": {
+          "$ref": "#/definitions/duration",
+          "description": "STP max-age timer. Example: `20s`."
+        },
+        "forward-delay": {
+          "$ref": "#/definitions/duration",
+          "description": "STP forward-delay timer. Example: `15s`."
+        },
+        "transmit-hold-count": {
+          "type": "integer",
+          "description": "STP transmit hold count. Example: `6`."
+        },
+        "priority": {
+          "type": "string",
+          "description": "STP bridge priority (hex). Example: `0x8000`."
+        },
+        "region-name": {
+          "type": "string",
+          "description": "MSTP region name. Example: `default`."
+        },
+        "region-revision": {
+          "type": "integer",
+          "description": "MSTP region revision. Example: `0`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the bridge is administratively down. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_interface_bridge_port": {
+      "type": "object",
+      "description": "/interface/bridge/port -- attaches an interface to a bridge.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` attaches a port; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find bridge=bridge-lan interface=ether2]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.bridge.lan.port.ether2`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"trunk to switch\"`."
+        },
+        "bridge": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Target bridge (by `iac.*` token). Example: `iac.bridge.lan`."
+        },
+        "interface": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Member interface (by `iac.*` token). Example: `iac.ether.ether2`."
+        },
+        "pvid": {
+          "$ref": "#/definitions/vlanId",
+          "description": "Native (untagged) VLAN id assigned to ingress frames. Example: `100`."
+        },
+        "frame-types": {
+          "type": "string",
+          "enum": [
+            "admit-all",
+            "admit-only-untagged-and-priority-tagged",
+            "admit-only-vlan-tagged"
+          ],
+          "description": "Per-port frame admission policy. Example: `admit-only-vlan-tagged`."
+        },
+        "ingress-filtering": {
+          "type": "boolean",
+          "description": "Drop tagged frames whose VLAN is not on the port. Example: `true`."
+        },
+        "tag-stacking": {
+          "type": "boolean",
+          "description": "Push an outer tag on ingress (Q-in-Q). Example: `false`."
+        },
+        "edge": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "no",
+            "no-discover",
+            "yes",
+            "yes-discover"
+          ],
+          "description": "STP edge-port hint. Example: `auto`."
+        },
+        "point-to-point": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "yes",
+            "no"
+          ],
+          "description": "STP point-to-point link hint. Example: `auto`."
+        },
+        "horizon": {
+          "type": [
+            "string",
+            "integer"
+          ],
+          "description": "Split-horizon group: ports with same horizon don't forward to each other. Example: `1`."
+        },
+        "hw": {
+          "type": "boolean",
+          "description": "Use hardware-offloaded switching for this port. Example: `true`."
+        },
+        "trusted": {
+          "type": "boolean",
+          "description": "Trust DHCP server messages (DHCP-snooping). Example: `false`."
+        },
+        "multicast-router": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "permanent",
+            "temporary-query",
+            "yes",
+            "no"
+          ],
+          "description": "Multicast-router role for IGMP snooping. Example: `temporary-query`."
+        },
+        "broadcast-flood": {
+          "type": "boolean",
+          "description": "Forward broadcasts to this port. Example: `true`."
+        },
+        "multicast-flood": {
+          "type": "boolean",
+          "description": "Forward unknown multicast to this port. Example: `true`."
+        },
+        "unknown-unicast-flood": {
+          "type": "boolean",
+          "description": "Forward unknown unicast to this port. Example: `true`."
+        },
+        "unknown-multicast-flood": {
+          "type": "boolean",
+          "description": "Forward unknown multicast to this port. Example: `true`."
+        },
+        "priority": {
+          "type": "string",
+          "description": "STP port priority (hex). Example: `0x80`."
+        },
+        "path-cost": {
+          "type": "integer",
+          "description": "STP path cost. Example: `10`."
+        },
+        "internal-path-cost": {
+          "type": "integer",
+          "description": "MSTP internal path cost. Example: `10`."
+        },
+        "auto-isolate": {
+          "type": "boolean",
+          "description": "Block port until BPDU is seen on an edge port. Example: `false`."
+        },
+        "bpdu-guard": {
+          "type": "boolean",
+          "description": "Disable port if any BPDU is received. Example: `false`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the port row is administratively disabled. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_interface_bridge_vlan": {
+      "type": "object",
+      "description": "/interface/bridge/vlan -- VLAN entry on a bridge.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` creates a new VLAN row; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find bridge=bridge-lan vlan-ids=100]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.bridge.lan.vlan.100`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"office VLAN\"`."
+        },
+        "bridge": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Target bridge (by `iac.*` token). Example: `iac.bridge.lan`."
+        },
+        "vlan-ids": {
+          "$ref": "#/definitions/vlanIdList",
+          "description": "VLAN id or range/list. Example: `100,200-210`."
+        },
+        "tagged": {
+          "type": "string",
+          "description": "Comma list of ports carrying these VLANs tagged. Example: `bridge-lan,ether1`."
+        },
+        "untagged": {
+          "type": "string",
+          "description": "Comma list of ports carrying these VLANs untagged. Example: `ether2,ether3`."
+        },
+        "current-tagged": {
+          "type": "string",
+          "description": "Read-only effective tagged set; not usually set in IaC. Example: omit."
+        },
+        "current-untagged": {
+          "type": "string",
+          "description": "Read-only effective untagged set; not usually set in IaC. Example: omit."
+        },
+        "mvrp-forbidden": {
+          "type": "string",
+          "description": "Ports forbidden to dynamically register the VLAN via MVRP. Example: omit."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the VLAN row is disabled. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_interface_vlan": {
+      "type": "object",
+      "description": "/interface/vlan -- VLAN interface terminating L3.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` creates a new VLAN interface; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find name=vlan100]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.vlan.lan100`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"office VLAN\"`."
+        },
+        "name": {
+          "$ref": "#/definitions/iacToken",
+          "description": "VLAN interface name. Example: `iac.vlan.lan100`."
+        },
+        "interface": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Parent (trunk) interface (by `iac.*` token). Example: `iac.bridge.lan`."
+        },
+        "vlan-id": {
+          "$ref": "#/definitions/vlanId",
+          "description": "802.1Q VLAN id. Example: `100`."
+        },
+        "use-service-tag": {
+          "type": "boolean",
+          "description": "Use S-VLAN (0x88a8) ether-type instead of C-VLAN. Example: `false`."
+        },
+        "loop-protect": {
+          "type": "string",
+          "enum": [
+            "default",
+            "on",
+            "off"
+          ],
+          "description": "Loop-protect mode. Example: `default`."
+        },
+        "loop-protect-disable-time": {
+          "$ref": "#/definitions/duration",
+          "description": "How long to keep the iface disabled after a loop. Example: `5m`."
+        },
+        "loop-protect-send-interval": {
+          "$ref": "#/definitions/duration",
+          "description": "Interval between loop-protect probes. Example: `5s`."
+        },
+        "mvrp": {
+          "type": "boolean",
+          "description": "Enable Multiple VLAN Registration Protocol on this iface. Example: `false`."
+        },
+        "mtu": {
+          "type": "integer",
+          "minimum": 68,
+          "maximum": 65535,
+          "description": "L3 MTU on the VLAN. Example: `1500`."
+        },
+        "arp": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "enabled",
+            "local-proxy-arp",
+            "proxy-arp",
+            "reply-only"
+          ],
+          "description": "ARP behaviour on the VLAN. Example: `enabled`."
+        },
+        "arp-timeout": {
+          "$ref": "#/definitions/duration",
+          "description": "ARP-cache entry timeout. Example: `auto`."
+        },
+        "mac-address": {
+          "$ref": "#/definitions/macAddressish",
+          "description": "Override the VLAN iface MAC. Example: `02:11:22:33:44:55`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the VLAN iface is administratively down. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_interface_wifi": {
+      "type": "object",
+      "description": "/interface/wifi -- a Wi-Fi radio or virtual AP (wifi-qcom).",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "set",
+          "description": "Physical radios exist by default -- prefer `set`; `add` registers a virtual AP. Example: `set`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find default-name=wifi1]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.wifi.wifi1`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"5GHz AP\"`."
+        },
+        "name": {
+          "$ref": "#/definitions/iacToken",
+          "description": "New logical name of the wifi iface. Example: `iac.wifi.wifi1`."
+        },
+        "default-name": {
+          "type": "string",
+          "description": "Factory radio label used for `set [find default-name=...]`. Example: `wifi1`."
+        },
+        "configuration": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Named `/interface/wifi/configuration` profile to apply. Example: `iac.wifi.cfg.home`."
+        },
+        "master-interface": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Parent radio for a virtual AP (when adding a multi-SSID). Example: `iac.wifi.wifi1`."
+        },
+        "channel": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Named channel profile to apply. Example: `iac.wifi.ch.5ghz`."
+        },
+        "security": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Named security profile to apply. Example: `iac.wifi.sec.wpa3`."
+        },
+        "datapath": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Named datapath profile to apply. Example: `iac.wifi.dp.lan`."
+        },
+        "aaa": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Named AAA profile to apply. Example: `iac.wifi.aaa.radius`."
+        },
+        "steering": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Named steering profile to apply. Example: `iac.wifi.steer.default`."
+        },
+        "mac-address": {
+          "$ref": "#/definitions/macAddressish",
+          "description": "Override the radio MAC. Example: `02:11:22:33:44:55`."
+        },
+        "mtu": {
+          "type": "integer",
+          "description": "L3 MTU on the wifi iface. Example: `1500`."
+        },
+        "l2mtu": {
+          "type": "integer",
+          "description": "L2 MTU on the wifi iface. Example: `1600`."
+        },
+        "arp": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "enabled",
+            "local-proxy-arp",
+            "proxy-arp",
+            "reply-only"
+          ],
+          "description": "ARP behaviour on the wifi iface. Example: `enabled`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the radio/AP is administratively down. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_interface_wifi_datapath": {
+      "type": "object",
+      "description": "/interface/wifi/datapath -- L2 datapath profile (bridge + VLAN + isolation).",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` registers a new profile; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find name=lan]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.wifi.dp.lan`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"LAN datapath\"`."
+        },
+        "name": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Profile name (referenced from `/interface/wifi`). Example: `iac.wifi.dp.lan`."
+        },
+        "bridge": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Bridge clients are placed into. Example: `iac.bridge.lan`."
+        },
+        "vlan-id": {
+          "$ref": "#/definitions/vlanId",
+          "description": "VLAN tagged on traffic from this datapath. Example: `100`."
+        },
+        "interface-list": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Interface-list to enrol the wifi iface into. Example: `iac.list.lan`."
+        },
+        "client-isolation": {
+          "type": "boolean",
+          "description": "Block client-to-client traffic via the AP. Example: `true`."
+        },
+        "client-to-client-forwarding": {
+          "type": "boolean",
+          "description": "Inverse of client isolation -- allow client-to-client. Example: `false`."
+        },
+        "arp": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "enabled",
+            "local-proxy-arp",
+            "proxy-arp",
+            "reply-only"
+          ],
+          "description": "ARP behaviour on associated clients. Example: `enabled`."
+        },
+        "openflow-switch": {
+          "type": "string",
+          "description": "Attach datapath traffic to an OpenFlow switch. Example: omit."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the profile is disabled. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_interface_wifi_security": {
+      "type": "object",
+      "description": "/interface/wifi/security -- WPA/WPA2/WPA3 + passphrase profile.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` registers a new profile; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find name=wpa3]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.wifi.sec.wpa3`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"home WPA3\"`."
+        },
+        "name": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Profile name (referenced from `/interface/wifi`). Example: `iac.wifi.sec.wpa3`."
+        },
+        "authentication-types": {
+          "type": "string",
+          "description": "Comma list of acceptable auth modes. Example: `wpa2-psk,wpa3-psk`."
+        },
+        "encryption": {
+          "type": "string",
+          "description": "Comma list of pairwise ciphers. Example: `ccmp,gcmp`."
+        },
+        "group-encryption": {
+          "type": "string",
+          "description": "Comma list of group ciphers. Example: `ccmp`."
+        },
+        "management-protection": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "allowed",
+            "required"
+          ],
+          "description": "PMF (802.11w) requirement. Example: `required`."
+        },
+        "passphrase": {
+          "type": "string",
+          "description": "PSK passphrase; prefer `$NAME` secret reference. Example: `$WIFI_PASSPHRASE`."
+        },
+        "owe-transition-interface": {
+          "type": "string",
+          "description": "Companion OWE-transition iface name. Example: omit."
+        },
+        "wps": {
+          "type": "string",
+          "enum": [
+            "disable",
+            "push-button",
+            "push-button-virtual-only"
+          ],
+          "description": "WPS push-button mode. Example: `disable`."
+        },
+        "ft": {
+          "type": "boolean",
+          "description": "Enable 802.11r Fast Transition. Example: `false`."
+        },
+        "ft-over-ds": {
+          "type": "boolean",
+          "description": "Allow FT over the distribution system. Example: `false`."
+        },
+        "ft-mobility-domain": {
+          "type": "string",
+          "description": "FT mobility domain id (hex). Example: `0xa1b2`."
+        },
+        "ft-nas-identifier": {
+          "type": "string",
+          "description": "NAS identifier used in FT. Example: `ap-01`."
+        },
+        "ft-preserve-vlanid": {
+          "type": "boolean",
+          "description": "Keep VLAN id during FT roam. Example: `true`."
+        },
+        "ft-r0-key-lifetime": {
+          "$ref": "#/definitions/duration",
+          "description": "R0 key lifetime. Example: `10m`."
+        },
+        "ft-reassociation-deadline": {
+          "$ref": "#/definitions/duration",
+          "description": "FT reassoc deadline. Example: `1s`."
+        },
+        "disable-pmkid": {
+          "type": "boolean",
+          "description": "Strip the PMKID from EAPOL frames (KRACK mitigation). Example: `false`."
+        },
+        "eap-methods": {
+          "type": "string",
+          "description": "EAP methods accepted (WPA-Enterprise). Example: `peap,eap-tls`."
+        },
+        "eap-username": {
+          "type": "string",
+          "description": "Outer identity for station-mode EAP. Example: `client01`."
+        },
+        "eap-password": {
+          "type": "string",
+          "description": "Password for station-mode EAP; prefer `$NAME` secret reference. Example: `$EAP_PASSWORD`."
+        },
+        "eap-tls-mode": {
+          "type": "string",
+          "description": "How TLS certificates are validated. Example: `verify-certificate`."
+        },
+        "client-certificate": {
+          "type": "string",
+          "description": "Client cert name used by EAP-TLS. Example: `client-cert`."
+        },
+        "trust-certificate": {
+          "type": "string",
+          "description": "CA cert trusted to validate the server. Example: `corp-ca`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the profile is disabled. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_interface_wifi_channel": {
+      "type": "object",
+      "description": "/interface/wifi/channel -- band + width + DFS policy.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` registers a new profile; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find name=5ghz]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.wifi.ch.5ghz`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"5GHz outdoor\"`."
+        },
+        "name": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Profile name (referenced from `/interface/wifi`). Example: `iac.wifi.ch.5ghz`."
+        },
+        "band": {
+          "type": "string",
+          "enum": [
+            "2ghz-ax",
+            "2ghz-n",
+            "2ghz-g",
+            "2ghz-b",
+            "2ghz-onlyg",
+            "2ghz-onlyn",
+            "2ghz-b/g/n",
+            "5ghz-ax",
+            "5ghz-ac",
+            "5ghz-n",
+            "5ghz-a",
+            "5ghz-onlyac",
+            "5ghz-onlyn",
+            "5ghz-a/n/ac/ax",
+            "6ghz-ax"
+          ],
+          "description": "PHY band/standard mode. Example: `5ghz-ax`."
+        },
+        "width": {
+          "type": "string",
+          "description": "Channel width. Example: `80mhz`."
+        },
+        "frequency": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Center frequency or comma list to scan. Example: `5180`."
+        },
+        "secondary-frequency": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Secondary 20MHz center for 80+80. Example: omit."
+        },
+        "reselect-interval": {
+          "$ref": "#/definitions/duration",
+          "description": "How often to revisit channel choice. Example: `1h`."
+        },
+        "skip-dfs-channels": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "all",
+            "10min-cac"
+          ],
+          "description": "DFS avoidance policy. Example: `10min-cac`."
+        },
+        "tx-power": {
+          "type": "integer",
+          "description": "Transmit power in dBm. Example: `20`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the profile is disabled. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_interface_wifi_configuration": {
+      "type": "object",
+      "description": "/interface/wifi/configuration -- binds datapath + security + channel.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` registers a new profile; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find name=home]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.wifi.cfg.home`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"home AP\"`."
+        },
+        "name": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Profile name (referenced from `/interface/wifi`). Example: `iac.wifi.cfg.home`."
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "ap",
+            "station",
+            "station-bridge",
+            "station-wds",
+            "wds-slave",
+            "alignment-only",
+            "cap"
+          ],
+          "description": "Radio operating mode. Example: `ap`."
+        },
+        "ssid": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Broadcast SSID. Example: `HomeNet`."
+        },
+        "hide-ssid": {
+          "type": "boolean",
+          "description": "Suppress SSID in beacons. Example: `false`."
+        },
+        "country": {
+          "type": "string",
+          "description": "Regulatory country (e.g. `united states`, `germany`). Example: `germany`."
+        },
+        "antenna-gain": {
+          "type": "integer",
+          "description": "External antenna gain in dBi. Example: `0`."
+        },
+        "tx-chains": {
+          "type": "string",
+          "description": "Comma list of TX chain indices. Example: `0,1`."
+        },
+        "rx-chains": {
+          "type": "string",
+          "description": "Comma list of RX chain indices. Example: `0,1`."
+        },
+        "channel": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Inline channel-profile reference. Example: `iac.wifi.ch.5ghz`."
+        },
+        "security": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Inline security-profile reference. Example: `iac.wifi.sec.wpa3`."
+        },
+        "datapath": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Inline datapath-profile reference. Example: `iac.wifi.dp.lan`."
+        },
+        "aaa": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Inline AAA-profile reference. Example: `iac.wifi.aaa.radius`."
+        },
+        "steering": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Inline steering-profile reference. Example: `iac.wifi.steer.default`."
+        },
+        "manager": {
+          "type": "string",
+          "description": "CAPsMAN manager identity (for CAP mode). Example: omit."
+        },
+        "multicast-enhancement": {
+          "type": "string",
+          "enum": [
+            "disabled",
+            "enabled"
+          ],
+          "description": "Convert multicast to unicast. Example: `disabled`."
+        },
+        "qos-classifier": {
+          "type": "string",
+          "description": "WMM classifier (e.g. `dscp-high-3-bits`). Example: `dscp-high-3-bits`."
+        },
+        "beacon-interval": {
+          "$ref": "#/definitions/duration",
+          "description": "Beacon interval. Example: `100ms`."
+        },
+        "distance": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Link distance hint (m). Example: `indoors`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the profile is disabled. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

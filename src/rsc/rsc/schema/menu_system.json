@@ -1,0 +1,216 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Schema fragment (menu_system.json). Merged into src/schema.json by src/schema/build.py. Do not load directly -- cross-fragment $ref uses '#/definitions/...' against the bundled output.",
+  "definitions": {
+    "menu_system": {
+      "description": "/system -- top-level system menu (identity, clock, NTP, scripts, scheduler, package, routerboard, health, watchdog, leds, ...).",
+      "type": "object",
+      "properties": {
+        "description": {
+          "$ref": "#/definitions/description"
+        },
+        "clock": {
+          "description": "/system/clock -- timezone + DST policy (singleton).",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/item_system_clock"
+          }
+        },
+        "identity": {
+          "description": "/system/identity -- router hostname (singleton).",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/item_system_identity"
+          }
+        },
+        "leds": {
+          "$ref": "#/definitions/menu_system_leds"
+        },
+        "note": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "scheduler": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "script": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "ntp": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "logging": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "package": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "routerboard": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "watchdog": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "health": {
+          "$ref": "#/definitions/menu_generic"
+        }
+      },
+      "additionalProperties": false
+    },
+    "menu_system_leds": {
+      "description": "/system/leds -- per-LED action rows (via `_items`) plus the `settings` singleton sub-menu controlling global LED behaviour.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "$ref": "#/definitions/description"
+        },
+        "_items": {
+          "$ref": "#/definitions/itemList_generic"
+        },
+        "settings": {
+          "description": "/system/leds/settings -- singleton row controlling global LED policy (e.g. all-leds-off schedule).",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/item_system_leds_settings"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_system_clock": {
+      "type": "object",
+      "description": "/system/clock -- timezone + DST policy (singleton).",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "set"
+          ],
+          "default": "set",
+          "description": "Singleton: always `set`. Example: `set`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unused for singletons; ignored if present. Example: omit."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.system.clock`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"production clock\"`."
+        },
+        "time-zone-name": {
+          "type": "string",
+          "description": "IANA time-zone name applied to the router. Example: `Europe/Berlin`."
+        },
+        "time-zone-autodetect": {
+          "type": "boolean",
+          "description": "If true, RouterOS picks the zone via GeoIP/cloud and ignores `time-zone-name`. Example: `false`."
+        },
+        "dst-active": {
+          "type": "boolean",
+          "description": "Read-only indicator that DST is currently in effect; typically not set in IaC. Example: omit."
+        },
+        "date": {
+          "type": "string",
+          "description": "Wall-clock date. Rarely set by IaC -- prefer NTP. Example: `2026-05-17`."
+        },
+        "time": {
+          "type": "string",
+          "description": "Wall-clock time. Rarely set by IaC -- prefer NTP. Example: `14:00:00`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_system_identity": {
+      "type": "object",
+      "description": "/system/identity -- router hostname (singleton).",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "set"
+          ],
+          "default": "set",
+          "description": "Singleton: always `set`. Example: `set`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unused for singletons. Example: omit."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.system.identity`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"core router\"`."
+        },
+        "name": {
+          "type": "string",
+          "description": "Hostname shown in winbox and CLI prompt. Example: `gw-core-01`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_system_leds_settings": {
+      "type": "object",
+      "description": "/system/leds/settings -- global LED policy (singleton).",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "set"
+          ],
+          "default": "set",
+          "description": "Singleton: always `set`. Example: `set`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unused for singletons. Example: omit."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.system.leds`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"dim LEDs at night\"`."
+        },
+        "all-leds-off": {
+          "type": "string",
+          "enum": [
+            "never",
+            "immediate",
+            "after-1min",
+            "after-1h"
+          ],
+          "description": "When to power off every status LED. Example: `after-1min`."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

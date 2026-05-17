@@ -13,16 +13,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from rsc.yaml import (  # noqa: E402
     SchemaValidationError,
+    bundled_schema,
     validate,
     validate_file,
     validate_text,
 )
 
 
-# Minimal schema covering the bits the tests exercise. The repo's real
-# schema lives at ../src/schema.json; these tests verify the validator
-# wiring, not the schema content (which has its own coverage via the
-# fixtures in tests/bundle/fixtures/yaml-profile).
+# Minimal schema covering the bits the tests exercise. The real schema
+# ships inside rsc.schema (see :func:`rsc.yaml.bundled_schema`); these
+# tests verify the validator wiring, not the schema content (which has
+# its own coverage via the fixtures in tests/bundle/fixtures/yaml-profile).
 #
 # Deliberately *not* using `oneOf` for the menu type -- jsonschema would
 # report one top-level oneOf failure instead of descending into the
@@ -142,20 +143,43 @@ def test_validate_file_missing_schema(tmp_path: Path) -> None:
         validate_file(bad, tmp_path / "no-such-schema.json")
 
 
-def test_validate_against_repo_schema_with_real_fixture() -> None:
-    """Smoke test against the real src/schema.json + a real profile module.
+def test_bundled_schema_round_trips() -> None:
+    """`bundled_schema()` returns a Draft-07 dict with definitions.
 
-    Verifies the schema is internally consistent and accepts what the
-    repo actually ships. Skips if either file isn't present (e.g. when
-    the rsc package is consumed outside this monorepo).
-
-    Path arithmetic: this file is at
-    ``<repo>/tools/src/rsc/tests/yaml_subpkg/test_validate.py`` so
-    ``parents[5]`` is the repo root in the iac layout.
+    Smoke test: ensures the in-memory bundle wires up correctly and
+    looks like the schema we expect (so callers can rely on it without
+    a separate `rsc schema --out ...` step).
     """
-    repo_root = Path(__file__).resolve().parents[5]
-    schema_path = repo_root / "src" / "schema.json"
-    real_yaml = repo_root / "src" / "segmentedx3" / "10-interfaces.yaml"
-    if not schema_path.is_file() or not real_yaml.is_file():
-        pytest.skip("repo schema or profile module not available")
-    validate_file(real_yaml, schema_path)
+    schema = bundled_schema()
+    assert isinstance(schema, dict)
+    assert schema.get("$schema") == "http://json-schema.org/draft-07/schema#"
+    defs = schema.get("definitions")
+    assert isinstance(defs, dict) and defs, "bundled schema must define definitions"
+
+
+def test_validate_file_defaults_to_bundled_schema(tmp_path: Path) -> None:
+    """`validate_file(path)` with no schema uses the bundled schema.
+
+    Authored against the real bundled schema so we exercise the same
+    definitions production callers hit.
+    """
+    good = tmp_path / "interfaces.yaml"
+    good.write_text(
+        "interface:\n  list:\n    - {operation: add, id: iac.list.wan, name: iac.list.wan}\n",
+        encoding="utf-8",
+    )
+    # No schema path = use rsc.schema.bundle() in-memory. Should not raise.
+    validate_file(good)
+
+
+def test_validate_file_bundled_catches_typo(tmp_path: Path) -> None:
+    """The bundled schema catches a misspelled property on a typed item."""
+    bad = tmp_path / "bad.yaml"
+    # `nme` is not a known property of item_interface_list, which has
+    # `additionalProperties: false`.
+    bad.write_text(
+        "interface:\n  list:\n    - {id: iac.list.wan, nme: iac.list.wan}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SchemaValidationError):
+        validate_file(bad)

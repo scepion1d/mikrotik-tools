@@ -174,19 +174,36 @@ def _check_duplicate_ids(cfg: Config) -> list[LintIssue]:
 #               many entries share the same `list=` grouping label)
 _REFERENCES: dict[str, tuple[str, tuple[str, ...]]] = {
     # interface props can point to any interface type; entity_id is the
-    # `name=iac.x` field.
+    # `name=iac.x` field. The candidate list mirrors every interface
+    # menu in MENUS_WITH_NAME plus the physical-only menus
+    # (/interface/ethernet has no name= but its `name=iac.ether.*` is
+    # set via `set [find default-name=...]`).
     "interface":         ("entity", (
         "/interface/ethernet", "/interface/vlan", "/interface/bridge",
+        "/interface/bonding", "/interface/vrrp",
         "/interface/wifi",
+        "/interface/wireguard",
+        "/interface/gre", "/interface/gre6",
+        "/interface/eoip", "/interface/eoip6",
+        "/interface/ipip", "/interface/ipip6",
+        "/interface/vxlan",
+        "/interface/ovpn-client",
+        "/interface/l2tp-client", "/interface/sstp-client",
+        "/interface/pptp-client", "/interface/pppoe-client",
     )),
     "bridge":            ("entity", ("/interface/bridge",)),
     "master-interface":  ("entity", ("/interface/wifi",)),
     "address-pool":      ("entity", ("/ip/pool",)),
+    # `pool=` is used by /ipv6/dhcp-server (refs /ipv6/pool) and by
+    # /ip/dhcp-server in some firmware variants (refs /ip/pool).
+    "pool":              ("entity", ("/ipv6/pool", "/ip/pool")),
     "server":            ("entity", ("/ip/dhcp-server",)),
     "configuration":     ("entity", ("/interface/wifi/configuration",)),
     "datapath":          ("entity", ("/interface/wifi/datapath",)),
     "security":          ("entity", ("/interface/wifi/security",)),
     "channel":           ("entity", ("/interface/wifi/channel",)),
+    "aaa":               ("entity", ("/interface/wifi/aaa",)),
+    "steering":          ("entity", ("/interface/wifi/steering",)),
     # `list=` (inside /interface/list/member) names an interface list --
     # match against the `name=` of /interface/list entries.
     "list":              ("name", ("/interface/list",)),
@@ -202,6 +219,52 @@ _REFERENCES: dict[str, tuple[str, tuple[str, ...]]] = {
     "dst-address-list":  ("list", (
         "/ip/firewall/address-list", "/ipv6/firewall/address-list",
     )),
+    # --- routing ----------------------------------------------------
+    # `routing-table=` (on /ip/route, /ip/route/rule, /ip/firewall/mangle
+    # action=mark-routing) names a /routing/table entry by its name=.
+    "routing-table":     ("entity", ("/routing/table",)),
+    # `vrf-interface=` on /ip/route/vrf names the carrying interface.
+    "vrf-interface":     ("entity", (
+        "/interface/ethernet", "/interface/vlan", "/interface/bridge",
+        "/interface/wireguard",
+    )),
+    # --- IPsec ------------------------------------------------------
+    "peer":              ("entity", ("/ip/ipsec/peer",)),
+    "profile":           ("entity", (
+        "/ip/ipsec/profile", "/ppp/profile",
+    )),
+    "proposal":          ("entity", ("/ip/ipsec/proposal",)),
+    "mode-config":       ("entity", ("/ip/ipsec/mode-config",)),
+    # --- certificates ------------------------------------------------
+    # Many menus take `certificate=` (e.g. /ip/service, /ip/ipsec/identity,
+    # /interface/ovpn-server, /certificate set ca-crl-host).
+    "certificate":       ("entity", ("/certificate",)),
+    # --- queues ------------------------------------------------------
+    # `queue=` on /queue/simple and /queue/tree names a /queue/type.
+    "queue":             ("entity", ("/queue/type",)),
+    # `parent=` on /queue/tree references another /queue/tree (or an
+    # interface name for the root). Validate against /queue/tree only;
+    # interface-name parents won't be iac.* tokens so they're skipped
+    # by the lint check anyway.
+    "parent":            ("entity", ("/queue/tree",)),
+    # --- users / auth ------------------------------------------------
+    # `group=` on /user references /user/group by name=.
+    "group":             ("entity", ("/user/group",)),
+    # `user=` on /user/ssh-keys references /user by name=.
+    "user":              ("entity", ("/user",)),
+    # --- system logging / scheduler ---------------------------------
+    # `action=` on /system/logging references /system/logging/action by
+    # name=. Note: many menus also use `action=` as an enum (accept,
+    # drop, ...); the lint check only fires on iac.* values, so the
+    # firewall enums are unaffected.
+    "action":            ("entity", ("/system/logging/action",)),
+    # `on-event=` on /system/scheduler names a /system/script by name=.
+    "on-event":          ("entity", ("/system/script",)),
+    # `source=` / `script=` on /system/scheduler same target.
+    "script":            ("entity", ("/system/script",)),
+    # --- PPP --------------------------------------------------------
+    # `default-profile=` on PPP client interfaces references /ppp/profile.
+    "default-profile":   ("entity", ("/ppp/profile",)),
 }
 
 

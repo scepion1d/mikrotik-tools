@@ -26,6 +26,7 @@ def test_no_args_prints_usage_and_returns_2(capsys: pytest.CaptureFixture[str]) 
     assert "diff" in err
     assert "reverse" in err
     assert "lint" in err
+    assert "schema" in err
 
 
 def test_help_flag_prints_usage_and_returns_0(capsys: pytest.CaptureFixture[str]) -> None:
@@ -44,6 +45,7 @@ def test_unknown_subcommand_returns_2(capsys: pytest.CaptureFixture[str]) -> Non
     assert "frobnicate" in err
     # Usage hint follows the error.
     assert "bundle" in err and "diff" in err and "reverse" in err and "lint" in err
+    assert "schema" in err
 
 
 # --- dispatch ---------------------------------------------------------------
@@ -112,6 +114,22 @@ def test_lint_dispatches_with_remaining_args(monkeypatch: pytest.MonkeyPatch) ->
     rc = cli_main(["lint", "--src", "live.rsc"])
     assert rc == 0
     assert captured["argv"] == ["--src", "live.rsc"]
+
+
+def test_schema_dispatches_with_remaining_args(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_main(argv: list[str] | None = None) -> int:
+        captured["argv"] = argv
+        return 0
+
+    import rsc.schema.cli as schema_cli
+
+    monkeypatch.setattr(schema_cli, "main", fake_main)
+
+    rc = cli_main(["schema", "--out", "src/schema.json", "--check"])
+    assert rc == 0
+    assert captured["argv"] == ["--out", "src/schema.json", "--check"]
 
 
 def test_dispatcher_uses_sys_argv_when_argv_is_none(

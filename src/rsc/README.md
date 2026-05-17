@@ -1,6 +1,6 @@
 # rsc
 
-Python toolkit for RouterOS `.rsc` script processing. One CLI with four
+Python toolkit for RouterOS `.rsc` script processing. One CLI with five
 subcommands plus a shared parser library.
 
 ```text
@@ -8,6 +8,7 @@ rsc bundle  --profile <folder> [--yaml] [...]  # merge profile -> single minimal
 rsc diff    --old A.rsc --new B.rsc            # diff two configs into a runnable patch
 rsc reverse --src live.rsc -o src/profile/     # convert .rsc back to YAML profile sources
 rsc lint    --src live.rsc | --profile <folder> [--yaml]   # semantic check for duplicate ids / dangling refs
+rsc schema  [--out PATH] [--check]             # write the bundled YAML JSON Schema
 ```
 
 The optional `--yaml` flag renders YAML folders to `.rsc` via the
@@ -38,7 +39,7 @@ rsc bundle --profile rsc\segmented -o my-bundle.rsc      # explicit file path
 rsc bundle --profile rsc\segmented --vars rsc\           # explicit vars folder
 rsc bundle --profile rsc\segmented --no-flatten          # raw concat, skip flatten/parse pipeline
 rsc bundle --profile src\segmented --yaml                # YAML sources (.yaml) under src\
-rsc bundle --profile src\segmented --validate            # validate vs schema.json before render (implies --yaml)
+rsc bundle --profile src\segmented --validate            # validate vs bundled rsc schema (in-memory)
 rsc bundle --profile src\segmented --validate path\to\schema.json   # explicit schema path
 ```
 
@@ -56,12 +57,13 @@ byte-equivalent to the `.rsc` mode for a correctly authored YAML
 profile (verifiable with `rsc diff --check`).
 
 `--validate` runs a JSON Schema check over every loaded YAML *before*
-rendering. Default schema path is `<vars-dir>/schema.json` (so in this
-repo: `src/schema.json`); pass an explicit path to override
-(`--validate path/to/other-schema.json`). Implies `--yaml`. Errors are
-reported with the file path, JSON-pointer-like key path, and the
-source line number; the renderer aborts with exit 2 if any file
-fails validation, so no partially-good bundle leaks to `-o`.
+rendering. With no value it uses the schema bundled inside this
+package (see `rsc.schema`, served by [rsc/schema/__init__.py](rsc/schema/__init__.py)) --
+no disk I/O against the consumer repo. Pass an explicit path to
+override (`--validate path/to/other-schema.json`). Implies `--yaml`.
+Errors are reported with the file path, JSON-pointer-like key path,
+and the source line number; the renderer aborts with exit 2 if any
+file fails validation, so no partially-good bundle leaks to `-o`.
 
 Diff two `.rsc` configs into a minimal patch (`add` / `set` / `reset` /
 `remove` ops). Two modes:
@@ -145,6 +147,35 @@ rsc lint: 3 issue(s) -- 3 error(s), 0 warning(s)
 
 Deferred (need pre-flatten text; not yet wired): `LINT003` (unused
 `:global`), `LINT004` (undefined `$varname` ref).
+
+### `rsc schema`
+
+Write the bundled JSON Schema for YAML profile sources to a file or
+stdout. The schema is split into fragments under [rsc/schema/](rsc/schema/)
+(one file per top-level RouterOS menu plus `_root.json` and `_common.json`)
+and merged on demand by [rsc.schema.bundle()](rsc/schema/__init__.py).
+Use this when you need the bundle as a file -- e.g. for the VS Code
+YAML extension's `# yaml-language-server: $schema=...` directives.
+`rsc bundle --validate` does **not** require this file; it consumes
+the in-memory bundle directly.
+
+```powershell
+rsc schema                                  # print bundle to stdout
+rsc schema --out src\schema.json            # write the bundle (used by build.ps1)
+rsc schema --out src\schema.json --check    # exit 1 if on-disk file is stale (CI / pre-commit)
+```
+
+The bundler detects duplicate definition names across fragments and
+writes with stable formatting (2-space indent, trailing newline), so
+re-runs are diff-free. The bundled JSON also ships inside the wheel
+as package data, so library callers can use it without a separate
+download:
+
+```python
+from rsc.schema import bundle, render
+schema = bundle()              # dict, ready for jsonschema.Draft7Validator
+text   = render()              # str, the same content as `rsc schema` stdout
+```
 
 ## Library
 

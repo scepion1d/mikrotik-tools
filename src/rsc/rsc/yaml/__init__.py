@@ -21,9 +21,10 @@ Public API
 - :func:`to_rsc`                 -- render a YAML string to ``.rsc`` text
 - :func:`to_rsc_file`            -- read + render a ``.yaml`` file from disk
 - :class:`YamlError`             -- raised on malformed YAML or render errors
-- :func:`validate_file`          -- validate a YAML file against ``src/schema.json``
+- :func:`validate_file`          -- validate a YAML file (default: bundled rsc schema)
 - :func:`validate_text`          -- validate YAML text + line-numbered errors
 - :func:`validate`               -- validate an already-parsed mapping
+- :func:`bundled_schema`         -- return the JSON Schema bundled in :mod:`rsc.schema`
 - :class:`SchemaValidationError` -- raised on any schema violation
 - :func:`to_yaml_files`          -- reverse: write a Config as ``NN-*.yaml`` files
 - :func:`to_yaml_docs`           -- reverse: build ``{filename: doc}`` in memory
@@ -36,6 +37,7 @@ from .converter import YamlError, to_rsc, to_rsc_file
 from .reverse import item_to_yaml, to_yaml_docs, to_yaml_files
 from .validate import (
     SchemaValidationError,
+    bundled_schema,
     validate,
     validate_file,
     validate_text,
@@ -47,6 +49,7 @@ __all__ = [
     "SchemaValidationError",
     "YamlError",
     "__version__",
+    "bundled_schema",
     "item_to_yaml",
     "to_rsc",
     "to_rsc_file",

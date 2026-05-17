@@ -1,0 +1,108 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Schema fragment (menu_generic.json). Merged into src/schema.json by src/schema/build.py. Do not load directly -- cross-fragment $ref uses '#/definitions/...' against the bundled output.",
+  "definitions": {
+    "menu_generic": {
+      "description": "Generic fallback for menus that don't have a per-entity schema. Either a list of items or a mapping of sub-menus with optional `_items`.",
+      "if": {
+        "type": "array"
+      },
+      "then": {
+        "$ref": "#/definitions/itemList_generic"
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "_items": {
+            "$ref": "#/definitions/itemList_generic"
+          },
+          "description": {
+            "$ref": "#/definitions/description"
+          }
+        },
+        "patternProperties": {
+          "^(?!_items$|description$)[A-Za-z0-9_-]+$": {
+            "$ref": "#/definitions/menu_generic"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "itemList_generic": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/item_generic"
+      }
+    },
+    "item_generic": {
+      "type": "object",
+      "description": "Generic RouterOS operation, used as fallback. Permissive on property names so any RouterOS property passes through.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "RouterOS verb: `add` creates a new row, `set` updates a row matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "RouterOS find expression used by `set` to locate the target row. Example: `[find default-name=ether1]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into the row's RouterOS `comment=` and used by drift/import to track rows across runs. Example: `iac.bridge.lan`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Number of trailing dot-separated segments of `id` to keep when sorting/grouping rows. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended to the RouterOS `comment=` after the `id` token. Example: `\"LAN bridge\"`."
+        }
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ]
+          },
+          {
+            "$ref": "#/definitions/varRef"
+          },
+          {
+            "$ref": "#/definitions/exprRef"
+          }
+        ]
+      }
+    },
+    "menu_routing": {
+      "$ref": "#/definitions/menu_generic"
+    },
+    "menu_queue": {
+      "$ref": "#/definitions/menu_generic"
+    },
+    "menu_ppp": {
+      "$ref": "#/definitions/menu_generic"
+    },
+    "menu_snmp": {
+      "$ref": "#/definitions/menu_generic"
+    },
+    "menu_radius": {
+      "$ref": "#/definitions/menu_generic"
+    },
+    "menu_certificate": {
+      "$ref": "#/definitions/menu_generic"
+    }
+  }
+}

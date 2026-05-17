@@ -1,0 +1,1581 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "description": "Schema fragment (menu_ip.json). Merged into src/schema.json by src/schema/build.py. Do not load directly -- cross-fragment $ref uses '#/definitions/...' against the bundled output.",
+  "definitions": {
+    "menu_ip": {
+      "description": "/ip -- top-level IPv4 menu. Houses addresses, ARP, DHCP client/server, DNS, firewall, services, routes, pools, and more. Known sub-menus get typed validation; unknown ones fall back to `menu_generic`.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "$ref": "#/definitions/description"
+        },
+        "address": {
+          "description": "/ip/address -- addresses bound to interfaces.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/item_ip_address"
+          }
+        },
+        "arp": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "cloud": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "dhcp-client": {
+          "description": "/ip/dhcp-client -- DHCP client instances (usually on WAN).",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/item_ip_dhcp_client"
+          }
+        },
+        "dhcp-relay": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "dhcp-server": {
+          "$ref": "#/definitions/menu_ip_dhcp_server"
+        },
+        "dns": {
+          "$ref": "#/definitions/menu_ip_dns"
+        },
+        "firewall": {
+          "$ref": "#/definitions/menu_ip_firewall"
+        },
+        "ipsec": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "neighbor": {
+          "$ref": "#/definitions/menu_ip_neighbor"
+        },
+        "pool": {
+          "description": "/ip/pool -- named IPv4 address pools (referenced by DHCP server).",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/item_ip_pool"
+          }
+        },
+        "proxy": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "route": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "service": {
+          "description": "/ip/service -- built-in router services (ssh, winbox, api, ...).",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/item_ip_service"
+          }
+        },
+        "settings": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "smb": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "socks": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "traffic-flow": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "upnp": {
+          "$ref": "#/definitions/menu_generic"
+        }
+      },
+      "additionalProperties": false
+    },
+    "menu_ip_dhcp_server": {
+      "description": "/ip/dhcp-server -- DHCP server instances. Either a plain list of server rows, or an object with `_items` plus `network` (per-subnet options) and `lease` (static reservations) sub-lists.",
+      "if": {
+        "type": "array"
+      },
+      "then": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/item_ip_dhcp_server"
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_ip_dhcp_server"
+            }
+          },
+          "description": {
+            "$ref": "#/definitions/description"
+          },
+          "network": {
+            "description": "/ip/dhcp-server/network -- per-subnet options handed to clients (gateway, DNS, NTP, ...).",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_ip_dhcp_server_network"
+            }
+          },
+          "lease": {
+            "description": "/ip/dhcp-server/lease -- static (pinned) DHCP leases.",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_ip_dhcp_server_lease"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "menu_ip_dns": {
+      "description": "/ip/dns -- DNS resolver / cache singleton. Either a plain list (with the singleton row), or an object with `_items` plus the `static` sub-list of static DNS records.",
+      "if": {
+        "type": "array"
+      },
+      "then": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/item_ip_dns"
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_ip_dns"
+            }
+          },
+          "description": {
+            "$ref": "#/definitions/description"
+          },
+          "static": {
+            "description": "/ip/dns/static -- static DNS records (A, AAAA, CNAME, FWD, MX, NS, SRV, TXT, ...).",
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/item_ip_dns_static"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "menu_ip_firewall": {
+      "description": "/ip/firewall -- IPv4 firewall. Hosts `address-list`, `filter`, `nat`, `mangle`, `raw`, `connection-tracking`, `service-port`, and `layer7-protocol` sub-menus.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "$ref": "#/definitions/description"
+        },
+        "address-list": {
+          "description": "/ip/firewall/address-list -- named IPv4 address-list entries.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/item_ip_firewall_address_list"
+          }
+        },
+        "filter": {
+          "description": "/ip/firewall/filter -- input/forward/output filter rules.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/item_ip_firewall_filter"
+          }
+        },
+        "nat": {
+          "description": "/ip/firewall/nat -- srcnat/dstnat rewrite rules.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/item_ip_firewall_nat"
+          }
+        },
+        "mangle": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "raw": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "connection-tracking": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "service-port": {
+          "$ref": "#/definitions/menu_generic"
+        },
+        "layer7-protocol": {
+          "$ref": "#/definitions/menu_generic"
+        }
+      },
+      "additionalProperties": false
+    },
+    "menu_ip_neighbor": {
+      "description": "/ip/neighbor -- LLDP/CDP/MNDP neighbour discovery. Holds the `discovery-settings` singleton sub-menu.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "$ref": "#/definitions/description"
+        },
+        "discovery-settings": {
+          "description": "/ip/neighbor/discovery-settings -- singleton policy for which interfaces participate in discovery, what TLVs to advertise, etc.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/item_ip_neighbor_discovery_settings"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_ip_address": {
+      "type": "object",
+      "description": "/ip/address -- address on an interface.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` creates a new address row; `set` updates the row matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find interface=lan]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.ip.address.lan`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"LAN gateway\"`."
+        },
+        "address": {
+          "$ref": "#/definitions/ipv4Cidr",
+          "description": "Local address with CIDR prefix. Example: `192.168.88.1/24`."
+        },
+        "network": {
+          "$ref": "#/definitions/ipv4Address",
+          "description": "Network address of the subnet (usually auto-derived). Example: `192.168.88.0`."
+        },
+        "interface": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Interface (by `iac.*` token) the address is bound to. Example: `iac.bridge.lan`."
+        },
+        "broadcast": {
+          "$ref": "#/definitions/ipv4Address",
+          "description": "Broadcast address of the subnet (usually auto-derived). Example: `192.168.88.255`."
+        },
+        "netmask": {
+          "$ref": "#/definitions/ipv4Address",
+          "description": "Dotted-quad netmask alternative to CIDR in `address`. Example: `255.255.255.0`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the address is created with `disabled=yes`. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_ip_dhcp_client": {
+      "type": "object",
+      "description": "/ip/dhcp-client -- DHCP client (usually WAN).",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` creates a new DHCP client row; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find interface=wan]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.ip.dhcp-client.wan`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"ISP uplink\"`."
+        },
+        "interface": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Interface (by `iac.*` token) on which to run DHCP. Example: `iac.ether.wan`."
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the dhcp-client row (RouterOS 7+). Example: `wan`."
+        },
+        "add-default-route": {
+          "type": [
+            "boolean",
+            "string"
+          ],
+          "description": "Install a default route from the lease. Accepts `yes`/`no`/`special-classless`. Example: `yes`."
+        },
+        "default-route-distance": {
+          "type": "integer",
+          "description": "Administrative distance of the installed default route. Example: `1`."
+        },
+        "default-route-tables": {
+          "type": "string",
+          "description": "Comma-separated routing tables to install the default route into. Example: `main`."
+        },
+        "dhcp-options": {
+          "type": "string",
+          "description": "Comma list of DHCP options to request. Example: `hostname,clientid`."
+        },
+        "use-peer-dns": {
+          "type": "boolean",
+          "description": "Apply DNS servers handed out by the DHCP server. Example: `true`."
+        },
+        "use-peer-ntp": {
+          "type": "boolean",
+          "description": "Apply NTP servers handed out by the DHCP server. Example: `false`."
+        },
+        "script": {
+          "type": "string",
+          "description": "RouterOS script run on lease events. Example: `:log info \"got lease\"`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the client is created with `disabled=yes`. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_ip_pool": {
+      "type": "object",
+      "description": "/ip/pool -- named pool of IPv4 addresses for DHCP.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` creates a new pool; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find name=lan]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.ip.pool.lan`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"LAN DHCP pool\"`."
+        },
+        "name": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Pool name (token-style; referenced from `/ip/dhcp-server`). Example: `iac.pool.lan`."
+        },
+        "ranges": {
+          "type": "string",
+          "description": "Comma-separated address ranges. Example: `192.168.88.100-192.168.88.250`."
+        },
+        "next-pool": {
+          "type": "string",
+          "description": "Pool to fall over to when this one is exhausted (or `none`). Example: `none`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_ip_dhcp_server": {
+      "type": "object",
+      "description": "/ip/dhcp-server -- a DHCP server instance bound to an interface + pool.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` creates a new DHCP server; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find name=lan]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.dhcp.lan`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"LAN DHCP\"`."
+        },
+        "name": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Server name (referenced from network/lease rows). Example: `iac.dhcp.lan`."
+        },
+        "interface": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Interface the server listens on. Example: `iac.bridge.lan`."
+        },
+        "address-pool": {
+          "type": "string",
+          "description": "Pool name to lease from (or `static-only`). Example: `iac.pool.lan`."
+        },
+        "lease-time": {
+          "$ref": "#/definitions/duration",
+          "description": "Default lease duration. Example: `1h`."
+        },
+        "authoritative": {
+          "type": [
+            "boolean",
+            "string"
+          ],
+          "description": "NAK clients with leases from other servers. Example: `yes`."
+        },
+        "bootp-support": {
+          "type": "string",
+          "enum": [
+            "none",
+            "static",
+            "dynamic"
+          ],
+          "description": "BOOTP fallback policy. Example: `static`."
+        },
+        "delay-threshold": {
+          "$ref": "#/definitions/duration",
+          "description": "Delay processing requests with elapsed-time above the threshold. Example: `none`."
+        },
+        "use-radius": {
+          "type": [
+            "boolean",
+            "string"
+          ],
+          "description": "Authorize leases via RADIUS. Example: `no`."
+        },
+        "always-broadcast": {
+          "type": "boolean",
+          "description": "Always reply to broadcast (workaround for some clients). Example: `false`."
+        },
+        "add-arp": {
+          "type": "boolean",
+          "description": "Add an ARP entry for each lease. Example: `true`."
+        },
+        "client-mac-limit": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Max leases per client MAC. Example: `unlimited`."
+        },
+        "allow-dual-stack-queue": {
+          "type": "boolean",
+          "description": "Share a simple queue with the IPv6 lease. Example: `false`."
+        },
+        "conflict-detection": {
+          "type": "boolean",
+          "description": "Send ICMP echo before handing out an address. Example: `true`."
+        },
+        "lease-script": {
+          "type": "string",
+          "description": "Script run on lease events (assigned/deassigned). Example: omit."
+        },
+        "relay": {
+          "$ref": "#/definitions/ipv4Address",
+          "description": "Address of the relay agent (when not on the same subnet). Example: `0.0.0.0`."
+        },
+        "src-address": {
+          "$ref": "#/definitions/ipv4Address",
+          "description": "Source address used for replies. Example: `192.168.88.1`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the server is disabled. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_ip_dhcp_server_network": {
+      "type": "object",
+      "description": "/ip/dhcp-server/network -- network options handed out to clients (gateway, DNS, ...).",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` registers a network; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find address=192.168.88.0/24]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.dhcp.network.lan`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"LAN options\"`."
+        },
+        "address": {
+          "$ref": "#/definitions/ipv4Cidr",
+          "description": "Subnet to which these options apply. Example: `192.168.88.0/24`."
+        },
+        "gateway": {
+          "$ref": "#/definitions/ipv4Address",
+          "description": "Default gateway handed to clients. Example: `192.168.88.1`."
+        },
+        "dns-server": {
+          "type": "string",
+          "description": "Comma list of DNS servers handed to clients. Example: `192.168.88.1`."
+        },
+        "ntp-server": {
+          "type": "string",
+          "description": "Comma list of NTP servers handed to clients. Example: `192.168.88.1`."
+        },
+        "wins-server": {
+          "type": "string",
+          "description": "Comma list of WINS servers handed to clients. Example: omit."
+        },
+        "domain": {
+          "type": "string",
+          "description": "Search domain handed to clients. Example: `lan`."
+        },
+        "boot-file-name": {
+          "type": "string",
+          "description": "PXE boot file name (option 67). Example: `pxelinux.0`."
+        },
+        "next-server": {
+          "$ref": "#/definitions/ipv4Address",
+          "description": "PXE next-server (option 66). Example: `192.168.88.10`."
+        },
+        "netmask": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Netmask prefix length advertised. Example: `24`."
+        },
+        "caps-manager": {
+          "type": "string",
+          "description": "CAPsMAN address advertised in option. Example: omit."
+        },
+        "dhcp-option": {
+          "type": "string",
+          "description": "Comma list of named DHCP options. Example: `tftp-server`."
+        },
+        "dhcp-option-set": {
+          "type": "string",
+          "description": "Named option-set to attach. Example: omit."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_ip_dhcp_server_lease": {
+      "type": "object",
+      "description": "/ip/dhcp-server/lease -- static DHCP lease.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` creates a static lease; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find mac-address=AA:BB:CC:DD:EE:FF]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.dhcp.lease.printer`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"office printer\"`."
+        },
+        "address": {
+          "$ref": "#/definitions/ipv4Address",
+          "description": "Pinned address for the client. Example: `192.168.88.10`."
+        },
+        "mac-address": {
+          "$ref": "#/definitions/macAddressish",
+          "description": "Client MAC the lease is keyed on. Example: `AA:BB:CC:DD:EE:FF`."
+        },
+        "client-id": {
+          "type": "string",
+          "description": "DHCP option-61 client-id (alternative key). Example: `01:AA:BB:CC:DD:EE:FF`."
+        },
+        "server": {
+          "$ref": "#/definitions/iacToken",
+          "description": "DHCP server (by `iac.*` token) the lease belongs to. Example: `iac.dhcp.lan`."
+        },
+        "lease-time": {
+          "$ref": "#/definitions/duration",
+          "description": "Per-lease override of the server default. Example: `1d`."
+        },
+        "address-lists": {
+          "type": "string",
+          "description": "Comma list of address-lists to add the leased IP to. Example: `iac.addr.known`."
+        },
+        "always-broadcast": {
+          "type": "boolean",
+          "description": "Always reply to broadcast for this client. Example: `false`."
+        },
+        "block-access": {
+          "type": "boolean",
+          "description": "Reject this client (keep the row for tracking). Example: `false`."
+        },
+        "use-src-mac": {
+          "type": "boolean",
+          "description": "Match on Ethernet source MAC instead of option 61. Example: `true`."
+        },
+        "dhcp-option": {
+          "type": "string",
+          "description": "Comma list of named DHCP options. Example: omit."
+        },
+        "dhcp-option-set": {
+          "type": "string",
+          "description": "Named option-set to attach. Example: omit."
+        },
+        "rate-limit": {
+          "type": "string",
+          "description": "`rx-rate/tx-rate` for this lease. Example: `10M/10M`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the lease is disabled. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_ip_dns": {
+      "type": "object",
+      "description": "/ip/dns -- DNS resolver / cache settings (singleton, `set`).",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "set"
+          ],
+          "default": "set",
+          "description": "Singleton: always `set`. Example: `set`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unused for singletons. Example: omit."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.ip.dns`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"DoH primary\"`."
+        },
+        "allow-remote-requests": {
+          "type": "boolean",
+          "description": "Serve DNS to clients (turn the router into a resolver). Example: `true`."
+        },
+        "servers": {
+          "type": "string",
+          "description": "Comma-separated upstream resolvers. Example: `1.1.1.1,9.9.9.9`."
+        },
+        "dynamic-servers": {
+          "type": "string",
+          "description": "Read-only -- resolvers learned via DHCP/PPP. Example: omit."
+        },
+        "cache-size": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Cache size in KiB. Example: `2048`."
+        },
+        "cache-max-ttl": {
+          "$ref": "#/definitions/duration",
+          "description": "Upper bound on cached record TTL. Example: `1d`."
+        },
+        "max-concurrent-queries": {
+          "type": "integer",
+          "description": "Limit on in-flight queries. Example: `100`."
+        },
+        "max-concurrent-tcp-sessions": {
+          "type": "integer",
+          "description": "Limit on TCP sessions to upstream. Example: `20`."
+        },
+        "max-udp-packet-size": {
+          "type": "integer",
+          "description": "Maximum UDP DNS response size. Example: `4096`."
+        },
+        "query-server-timeout": {
+          "$ref": "#/definitions/duration",
+          "description": "Per-server query timeout. Example: `2s`."
+        },
+        "query-total-timeout": {
+          "$ref": "#/definitions/duration",
+          "description": "Overall query timeout across servers. Example: `10s`."
+        },
+        "verify-doh-cert": {
+          "type": "boolean",
+          "description": "Verify the DoH server's TLS certificate. Example: `true`."
+        },
+        "use-doh-server": {
+          "type": "string",
+          "description": "DoH endpoint URL. Example: `https://cloudflare-dns.com/dns-query`."
+        },
+        "doh-max-concurrent-queries": {
+          "type": "integer",
+          "description": "Limit on in-flight DoH queries. Example: `50`."
+        },
+        "doh-max-server-connections": {
+          "type": "integer",
+          "description": "Connection pool size to the DoH server. Example: `5`."
+        },
+        "doh-timeout": {
+          "$ref": "#/definitions/duration",
+          "description": "Per-query DoH timeout. Example: `5s`."
+        },
+        "address-list-extra-time": {
+          "$ref": "#/definitions/duration",
+          "description": "Extra TTL added to dynamic address-list entries from DNS. Example: `10m`."
+        },
+        "mdns-repeat-ifaces": {
+          "type": "string",
+          "description": "Comma list of interfaces to bridge mDNS traffic across. Example: `bridge-lan,bridge-iot`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_ip_dns_static": {
+      "type": "object",
+      "description": "/ip/dns/static -- a static DNS record.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` creates a new record; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find name=router.lan]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.dns.static.router`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"pin gateway\"`."
+        },
+        "name": {
+          "type": "string",
+          "description": "FQDN matched by this record. Example: `router.lan`."
+        },
+        "regexp": {
+          "type": "string",
+          "description": "Regex matched against query names (alternative to `name`). Example: `.*\\.lan$`."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "A",
+            "AAAA",
+            "CNAME",
+            "FWD",
+            "MX",
+            "NS",
+            "NXDOMAIN",
+            "SRV",
+            "TXT"
+          ],
+          "description": "DNS record type. Example: `A`."
+        },
+        "address": {
+          "$ref": "#/definitions/ipv4Address",
+          "description": "Answer address for type `A`. Example: `192.168.88.1`."
+        },
+        "cname": {
+          "type": "string",
+          "description": "Canonical name for type `CNAME`. Example: `router.lan`."
+        },
+        "forward-to": {
+          "type": "string",
+          "description": "Upstream resolver for type `FWD`. Example: `1.1.1.1`."
+        },
+        "mx-exchange": {
+          "type": "string",
+          "description": "MX target hostname. Example: `mail.example.com`."
+        },
+        "mx-preference": {
+          "type": "integer",
+          "description": "MX preference value (lower wins). Example: `10`."
+        },
+        "ns": {
+          "type": "string",
+          "description": "Nameserver for type `NS`. Example: `ns1.example.com`."
+        },
+        "srv-port": {
+          "type": "integer",
+          "description": "SRV target port. Example: `5060`."
+        },
+        "srv-priority": {
+          "type": "integer",
+          "description": "SRV priority (lower wins). Example: `10`."
+        },
+        "srv-target": {
+          "type": "string",
+          "description": "SRV target hostname. Example: `sip.example.com`."
+        },
+        "srv-weight": {
+          "type": "integer",
+          "description": "SRV weight for load-balancing at equal priority. Example: `100`."
+        },
+        "text": {
+          "type": "string",
+          "description": "Payload for type `TXT`. Example: `\"v=spf1 -all\"`."
+        },
+        "ttl": {
+          "$ref": "#/definitions/duration",
+          "description": "Cache TTL handed to clients. Example: `1h`."
+        },
+        "match-subdomain": {
+          "type": "boolean",
+          "description": "If true, also match `*.<name>`. Example: `false`."
+        },
+        "address-list": {
+          "type": "string",
+          "description": "Address-list to add the answer IP to. Example: `iac.addr.allow`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the record is created with `disabled=yes`. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_ip_neighbor_discovery_settings": {
+      "type": "object",
+      "description": "/ip/neighbor/discovery-settings -- singleton.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "set"
+          ],
+          "default": "set",
+          "description": "Singleton: always `set`. Example: `set`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unused for singletons. Example: omit."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.ip.neighbor`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"hide from WAN\"`."
+        },
+        "discover-interface-list": {
+          "type": "string",
+          "description": "Interface-list whose members may receive/send discovery (CDP/LLDP/MNDP). Example: `iac.list.mgmt`."
+        },
+        "lldp-mac-phy-config": {
+          "type": "boolean",
+          "description": "Advertise MAC/PHY config TLV in LLDP. Example: `false`."
+        },
+        "lldp-max-frame-size": {
+          "type": "boolean",
+          "description": "Advertise max-frame-size TLV in LLDP. Example: `false`."
+        },
+        "lldp-med-net-policy-vlan": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "LLDP-MED voice VLAN to advertise. Example: `disabled`."
+        },
+        "lldp-poe-power": {
+          "type": "boolean",
+          "description": "Advertise PoE power TLV in LLDP. Example: `false`."
+        },
+        "lldp-vlan-info": {
+          "type": "boolean",
+          "description": "Advertise VLAN TLV in LLDP. Example: `false`."
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "rx-only",
+            "tx-rx"
+          ],
+          "description": "Discovery direction. Example: `rx-only`."
+        },
+        "protocol": {
+          "type": "string",
+          "description": "Comma list of enabled discovery protocols. Example: `lldp,mndp`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_ip_service": {
+      "type": "object",
+      "description": "/ip/service -- a router-side service (telnet, ssh, winbox, ...).",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "set"
+          ],
+          "default": "set",
+          "description": "Services are pre-created -- always `set`. Example: `set`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find name=ssh]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.ip.service.ssh`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"mgmt only\"`."
+        },
+        "name": {
+          "type": "string",
+          "enum": [
+            "telnet",
+            "ftp",
+            "www",
+            "ssh",
+            "www-ssl",
+            "api",
+            "winbox",
+            "api-ssl"
+          ],
+          "description": "Built-in RouterOS service. Example: `ssh`."
+        },
+        "address": {
+          "type": "string",
+          "description": "Comma list of CIDRs permitted to access the service. Example: `10.0.0.0/24`."
+        },
+        "port": {
+          "$ref": "#/definitions/port",
+          "description": "TCP port the service listens on. Example: `2222`."
+        },
+        "certificate": {
+          "type": "string",
+          "description": "Certificate name for SSL services. Example: `router-cert`."
+        },
+        "tls-version": {
+          "type": "string",
+          "enum": [
+            "any",
+            "only-1.2"
+          ],
+          "description": "Minimum TLS version accepted. Example: `only-1.2`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the service is disabled. Example: `true`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_ip_firewall_address_list": {
+      "type": "object",
+      "description": "/ip/firewall/address-list -- one entry in a named address-list.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` appends a new entry; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find list=blocklist address=1.2.3.4]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.addr.lan-clients`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"office subnet\"`."
+        },
+        "list": {
+          "type": "string",
+          "description": "Address-list name the entry belongs to. Example: `lan_clients`."
+        },
+        "address": {
+          "$ref": "#/definitions/ipv4OrCidrOrList",
+          "description": "IPv4 address, CIDR, range, or comma list. Example: `192.168.88.0/24`."
+        },
+        "timeout": {
+          "$ref": "#/definitions/duration",
+          "description": "Optional auto-expiry. Example: `1h`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the entry is created with `disabled=yes`. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_ip_firewall_nat": {
+      "type": "object",
+      "description": "/ip/firewall/nat -- NAT rule (srcnat/dstnat chain).",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` appends a rule; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find chain=srcnat comment~\"masq\"]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.nat.masq.wan`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"masquerade WAN\"`."
+        },
+        "chain": {
+          "type": "string",
+          "enum": [
+            "srcnat",
+            "dstnat"
+          ],
+          "description": "NAT chain. Example: `srcnat`."
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "accept",
+            "add-dst-to-address-list",
+            "add-src-to-address-list",
+            "dst-nat",
+            "jump",
+            "log",
+            "masquerade",
+            "netmap",
+            "passthrough",
+            "redirect",
+            "return",
+            "same",
+            "src-nat"
+          ],
+          "description": "NAT action. Example: `masquerade`."
+        },
+        "src-address": {
+          "type": "string",
+          "description": "Source address(es) to match. Example: `192.168.88.0/24`."
+        },
+        "dst-address": {
+          "type": "string",
+          "description": "Destination address(es) to match. Example: `0.0.0.0/0`."
+        },
+        "src-address-list": {
+          "type": "string",
+          "description": "Match if source IP is on this list. Example: `iac.addr.lan`."
+        },
+        "dst-address-list": {
+          "type": "string",
+          "description": "Match if destination IP is on this list. Example: `iac.addr.public`."
+        },
+        "src-port": {
+          "$ref": "#/definitions/port",
+          "description": "Source L4 port(s). Example: `1024-65535`."
+        },
+        "dst-port": {
+          "$ref": "#/definitions/port",
+          "description": "Destination L4 port(s). Example: `443`."
+        },
+        "port": {
+          "$ref": "#/definitions/port",
+          "description": "Match either src- or dst-port. Example: `53`."
+        },
+        "protocol": {
+          "type": [
+            "string",
+            "integer"
+          ],
+          "description": "IP protocol name or number. Example: `tcp`."
+        },
+        "in-interface": {
+          "type": "string",
+          "description": "Ingress interface name. Example: `wan`."
+        },
+        "out-interface": {
+          "type": "string",
+          "description": "Egress interface name. Example: `wan`."
+        },
+        "in-interface-list": {
+          "type": "string",
+          "description": "Match ingress on any iface in this list. Example: `iac.list.lan`."
+        },
+        "out-interface-list": {
+          "type": "string",
+          "description": "Match egress on any iface in this list. Example: `iac.list.wan`."
+        },
+        "to-addresses": {
+          "type": "string",
+          "description": "Rewrite target address(es). Example: `203.0.113.10`."
+        },
+        "to-ports": {
+          "$ref": "#/definitions/port",
+          "description": "Rewrite target port(s). Example: `8080`."
+        },
+        "ipsec-policy": {
+          "type": "string",
+          "description": "Match IPsec policy state. Example: `out,none`."
+        },
+        "ipv4-options": {
+          "type": "string",
+          "description": "Match IPv4 option flags. Example: `any`."
+        },
+        "log": {
+          "type": "boolean",
+          "description": "Also log matched packets. Example: `false`."
+        },
+        "log-prefix": {
+          "type": "string",
+          "description": "String prefixed to log lines. Example: `nat-masq`."
+        },
+        "address-list": {
+          "type": "string",
+          "description": "Target list for `add-*-to-address-list` actions. Example: `iac.addr.scanners`."
+        },
+        "address-list-timeout": {
+          "$ref": "#/definitions/duration",
+          "description": "Expiry for entries added by the action. Example: `1h`."
+        },
+        "connection-mark": {
+          "type": "string",
+          "description": "Match a connection mark set earlier in mangle. Example: `vpn`."
+        },
+        "connection-type": {
+          "type": "string",
+          "description": "Match helper-classified connection type. Example: `sip`."
+        },
+        "routing-mark": {
+          "type": "string",
+          "description": "Match a routing-mark. Example: `wan2`."
+        },
+        "packet-mark": {
+          "type": "string",
+          "description": "Match a packet-mark. Example: `voip`."
+        },
+        "src-mac-address": {
+          "$ref": "#/definitions/macAddressish",
+          "description": "Match a source MAC address. Example: `AA:BB:CC:DD:EE:FF`."
+        },
+        "jump-target": {
+          "type": "string",
+          "description": "Target chain for `action=jump`. Example: `srcnat-internal`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the rule is created with `disabled=yes`. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    },
+    "item_ip_firewall_filter": {
+      "type": "object",
+      "description": "/ip/firewall/filter -- filter rule.",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "enum": [
+            "add",
+            "set"
+          ],
+          "default": "add",
+          "description": "`add` appends a rule; `set` updates one matched by `filter`. Example: `add`."
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Find expression for `set`. Example: `[find chain=input comment~\"icmp\"]`."
+        },
+        "id": {
+          "$ref": "#/definitions/iacToken",
+          "description": "Stable IaC identity token rendered into `comment=`. Example: `iac.fw.input.icmp`."
+        },
+        "id_pad": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "description": "Trailing dot-segments of `id` to retain for ordering. Example: `1`."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Free-form text appended after the `id` token in the RouterOS comment. Example: `\"allow ICMP\"`."
+        },
+        "chain": {
+          "type": "string",
+          "description": "Filter chain (`input`, `forward`, `output`, or custom). Example: `input`."
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "accept",
+            "add-dst-to-address-list",
+            "add-src-to-address-list",
+            "drop",
+            "fasttrack-connection",
+            "jump",
+            "log",
+            "passthrough",
+            "reject",
+            "return",
+            "tarpit"
+          ],
+          "description": "Filter action. Example: `accept`."
+        },
+        "src-address": {
+          "type": "string",
+          "description": "Source address(es) to match. Example: `192.168.88.0/24`."
+        },
+        "dst-address": {
+          "type": "string",
+          "description": "Destination address(es) to match. Example: `0.0.0.0/0`."
+        },
+        "src-address-list": {
+          "type": "string",
+          "description": "Match if source IP is on this list. Example: `iac.addr.lan`."
+        },
+        "dst-address-list": {
+          "type": "string",
+          "description": "Match if destination IP is on this list. Example: `iac.addr.blocked`."
+        },
+        "src-port": {
+          "$ref": "#/definitions/port",
+          "description": "Source L4 port(s). Example: `1024-65535`."
+        },
+        "dst-port": {
+          "$ref": "#/definitions/port",
+          "description": "Destination L4 port(s). Example: `443`."
+        },
+        "port": {
+          "$ref": "#/definitions/port",
+          "description": "Match either src- or dst-port. Example: `53`."
+        },
+        "protocol": {
+          "type": [
+            "string",
+            "integer"
+          ],
+          "description": "IP protocol name or number. Example: `tcp`."
+        },
+        "in-interface": {
+          "type": "string",
+          "description": "Ingress interface name. Example: `bridge-lan`."
+        },
+        "out-interface": {
+          "type": "string",
+          "description": "Egress interface name. Example: `wan`."
+        },
+        "in-interface-list": {
+          "type": "string",
+          "description": "Match ingress on any iface in this list. Example: `iac.list.lan`."
+        },
+        "out-interface-list": {
+          "type": "string",
+          "description": "Match egress on any iface in this list. Example: `iac.list.wan`."
+        },
+        "in-bridge-port": {
+          "type": "string",
+          "description": "Ingress bridge port name. Example: `ether2`."
+        },
+        "out-bridge-port": {
+          "type": "string",
+          "description": "Egress bridge port name. Example: `ether3`."
+        },
+        "in-bridge-port-list": {
+          "type": "string",
+          "description": "Match ingress on any bridge port in this list. Example: `iac.list.lan-ports`."
+        },
+        "out-bridge-port-list": {
+          "type": "string",
+          "description": "Match egress on any bridge port in this list. Example: `iac.list.lan-ports`."
+        },
+        "connection-state": {
+          "type": "string",
+          "description": "Conntrack state set. Example: `established,related`."
+        },
+        "connection-nat-state": {
+          "type": "string",
+          "description": "Match NAT state (`srcnat`,`dstnat`). Example: `dstnat`."
+        },
+        "connection-mark": {
+          "type": "string",
+          "description": "Match a connection mark. Example: `vpn`."
+        },
+        "connection-type": {
+          "type": "string",
+          "description": "Match helper-classified connection type. Example: `sip`."
+        },
+        "connection-limit": {
+          "type": "string",
+          "description": "Connection-count match. Example: `100,32`."
+        },
+        "connection-rate": {
+          "type": "string",
+          "description": "Connection bps rate match. Example: `1M-100M`."
+        },
+        "content": {
+          "type": "string",
+          "description": "Match payload substring. Example: `\"GET /\"`."
+        },
+        "fragment": {
+          "type": "boolean",
+          "description": "Match IP fragments. Example: `true`."
+        },
+        "hotspot": {
+          "type": "string",
+          "description": "Hotspot match (`auth`, `from-client`, ...). Example: `auth`."
+        },
+        "hop-limit": {
+          "type": "string",
+          "description": "IPv4 TTL match. Example: `equal:1`."
+        },
+        "icmp-options": {
+          "type": "string",
+          "description": "ICMP type:code. Example: `8:0`."
+        },
+        "ingress-priority": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Match VLAN/MPLS ingress priority. Example: `0`."
+        },
+        "ipsec-policy": {
+          "type": "string",
+          "description": "Match IPsec policy state. Example: `in,ipsec`."
+        },
+        "ipv4-options": {
+          "type": "string",
+          "description": "Match IPv4 option flags. Example: `any`."
+        },
+        "jump-target": {
+          "type": "string",
+          "description": "Target chain for `action=jump`. Example: `tcp`."
+        },
+        "layer7-protocol": {
+          "type": "string",
+          "description": "Named L7 regex profile to match. Example: `omit`."
+        },
+        "limit": {
+          "type": "string",
+          "description": "`count,burst:mode` rate limit. Example: `10,5:packet`."
+        },
+        "log": {
+          "type": "boolean",
+          "description": "Also log matched packets. Example: `false`."
+        },
+        "log-prefix": {
+          "type": "string",
+          "description": "String prefixed to log lines. Example: `fw-drop`."
+        },
+        "nth": {
+          "type": "string",
+          "description": "Match every n-th packet (`every,packet`). Example: `2,1`."
+        },
+        "p2p": {
+          "type": "string",
+          "description": "Match a P2P protocol. Example: omit."
+        },
+        "packet-mark": {
+          "type": "string",
+          "description": "Match a packet-mark. Example: `voip`."
+        },
+        "packet-size": {
+          "type": "string",
+          "description": "Packet size range in bytes. Example: `64-1500`."
+        },
+        "per-connection-classifier": {
+          "type": "string",
+          "description": "PCC selector. Example: `src-address-and-port:2/0`."
+        },
+        "priority": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Match queue priority. Example: `4`."
+        },
+        "psd": {
+          "type": "string",
+          "description": "Port-scan detector params. Example: `21,3s,3,1`."
+        },
+        "random": {
+          "type": [
+            "integer",
+            "string"
+          ],
+          "description": "Match a random N percent of packets. Example: `50`."
+        },
+        "reject-with": {
+          "type": "string",
+          "description": "ICMP/TCP reject reason. Example: `icmp-net-prohibited`."
+        },
+        "routing-mark": {
+          "type": "string",
+          "description": "Match a routing-mark. Example: `wan2`."
+        },
+        "routing-table": {
+          "type": "string",
+          "description": "Match a routing-table. Example: `main`."
+        },
+        "src-mac-address": {
+          "$ref": "#/definitions/macAddressish",
+          "description": "Match a source MAC address. Example: `AA:BB:CC:DD:EE:FF`."
+        },
+        "tcp-flags": {
+          "type": "string",
+          "description": "TCP flag mask. Example: `syn,!ack`."
+        },
+        "tcp-mss": {
+          "type": "string",
+          "description": "TCP MSS match. Example: `1300-1460`."
+        },
+        "time": {
+          "type": "string",
+          "description": "Time-of-day/day-of-week filter. Example: `08:00-18:00,mon,tue,wed,thu,fri`."
+        },
+        "tls-host": {
+          "type": "string",
+          "description": "Match SNI hostname (regex). Example: `.*example\\.com$`."
+        },
+        "ttl": {
+          "type": "string",
+          "description": "IPv4 TTL comparator. Example: `equal:1`."
+        },
+        "address-list": {
+          "type": "string",
+          "description": "Target list for `add-*-to-address-list` actions. Example: `iac.addr.bruteforce`."
+        },
+        "address-list-timeout": {
+          "$ref": "#/definitions/duration",
+          "description": "Expiry for entries added by the action. Example: `1d`."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "If true, the rule is created with `disabled=yes`. Example: `false`."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
