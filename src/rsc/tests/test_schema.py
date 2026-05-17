@@ -104,7 +104,6 @@ def test_bundle_raises_when_root_fragment_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A schema dir without ``_root.json`` is an unrecoverable error."""
-    # Empty schema dir -- not even _root.json present.
     monkeypatch.setattr(schema_mod, "_HERE", tmp_path)
     with pytest.raises(FileNotFoundError, match="_root.json"):
         bundle()
@@ -178,7 +177,6 @@ def test_cli_no_out_writes_bundle_to_stdout(
     rc = schema_main([])
     assert rc == 0
     out = capsys.readouterr().out
-    # Output is the same as `render()` and parses as JSON.
     assert out == render()
     assert json.loads(out) == bundle()
 
@@ -190,9 +188,7 @@ def test_cli_out_writes_file_and_creates_parent_dirs(
     rc = schema_main(["--out", str(out_path)])
     assert rc == 0
     assert out_path.is_file()
-    # On-disk content == in-memory render.
     assert out_path.read_text(encoding="utf-8") == render()
-    # Friendly progress line on stdout.
     out = capsys.readouterr().out
     assert "wrote" in out
     assert str(out_path) in out

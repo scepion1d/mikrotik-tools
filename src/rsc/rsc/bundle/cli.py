@@ -238,8 +238,6 @@ def _run_validate(
     """
     from rsc.yaml import SchemaValidationError, validate_file
 
-    # Schema discovery: explicit path -> load from disk; empty -> use
-    # the bundle shipped inside the rsc package.
     if explicit_schema:
         schema_path: Path | None = Path(explicit_schema)
         if not schema_path.is_file():
